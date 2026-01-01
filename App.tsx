@@ -12,14 +12,9 @@ import * as echarts from 'echarts';
 // 核心工具函数：月相计算
 // ==========================================
 
-/**
- * 根据日期计算月相
- * @param date 目标日期
- * @returns 包含月相名称和 Emoji 的对象
- */
 const getMoonPhase = (date: Date) => {
-  const lp = 2551442.8; // 一个朔望月的秒数
-  const newMoonRef = new Date(1970, 0, 7, 20, 35, 0).getTime() / 1000; // 基准新月日期
+  const lp = 2551442.8; 
+  const newMoonRef = new Date(1970, 0, 7, 20, 35, 0).getTime() / 1000; 
   const now = date.getTime() / 1000;
   const phase = ((now - newMoonRef) % lp) / lp;
 
@@ -38,10 +33,6 @@ const getMoonPhaseFromNormalized = (phase: number) => {
   return { name: "残月", emoji: "🌘" };
 };
 
-// ==========================================
-// 常量与样式预设
-// ==========================================
-
 const LENORMAND_THEMES: Record<LenormandColor, string> = {
   default: 'from-slate-900 via-teal-900 to-slate-900',
   water: 'from-blue-900 via-indigo-900 to-blue-950',
@@ -52,10 +43,6 @@ const LENORMAND_THEMES: Record<LenormandColor, string> = {
 };
 
 const PRESET_TAGS = ['❤️ 感情', '💰 事业', '🎓 学业', '🧘‍♀️ 灵性', '🏠 生活'];
-
-// ==========================================
-// 子组件：单张牌卡显示
-// ==========================================
 
 const CardBack: React.FC<{ 
   type: DeckType; 
@@ -134,7 +121,6 @@ const CardBack: React.FC<{
   );
 };
 
-// 详情弹窗
 const CardInfoModal: React.FC<{ cardName: string; type: DeckType; isReversed?: boolean; onClose: () => void; theme: ThemeMode }> = ({ cardName, type, isReversed, onClose, theme }) => {
   const details = type === DeckType.TAROT ? TAROT_DETAILS[cardName] : LENORMAND_DETAILS[cardName];
   if (!details) return null;
@@ -159,10 +145,6 @@ const CardInfoModal: React.FC<{ cardName: string; type: DeckType; isReversed?: b
   );
 };
 
-// ==========================================
-// 主应用组件
-// ==========================================
-
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>({ entries: [], currentView: 'home', theme: 'dark' });
   const [isLoading, setIsLoading] = useState(false);
@@ -176,12 +158,10 @@ const App: React.FC = () => {
   const barChartRef = useRef<HTMLDivElement>(null);
   const lineChartRef = useRef<HTMLDivElement>(null);
 
-  // 语音输入状态
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // 获取本地时间字符串 YYYY-MM-DDTHH:mm (datetime-local 格式)
   const getLocalISOString = (date: Date) => {
     const tzOffset = date.getTimezoneOffset() * 60000;
     return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
@@ -194,7 +174,7 @@ const App: React.FC = () => {
     selectedCards: SelectedCard[]; 
     lenormandColor: LenormandColor; 
     tag?: string;
-    readingDate: string; // 抽牌时间
+    readingDate: string;
   }>({
     deckType: DeckType.TAROT, 
     image: '', 
@@ -241,13 +221,11 @@ const App: React.FC = () => {
   const selectedEntry = state.entries.find(e => e.id === state.selectedEntryId);
   const isDark = state.theme === 'dark';
 
-  // 仪表盘统计计算
   const dashboardStats = useMemo(() => {
     const entries = state.entries;
     const totalEntries = entries.length;
     const uniqueDays = new Set(entries.map(e => new Date(e.date).toDateString())).size;
     
-    // 高频牌统计
     const cardCounts: Record<string, number> = {};
     entries.forEach(e => e.selectedCards?.forEach(c => {
       cardCounts[c.name] = (cardCounts[c.name] || 0) + 1;
@@ -255,7 +233,7 @@ const App: React.FC = () => {
 
     const sortedCards = Object.entries(cardCounts)
       .sort(([, a], [, b]) => b - a)
-      .slice(0, 5); // 取前 5
+      .slice(0, 5);
 
     const topCardNames = sortedCards.map(([name]) => {
       const detail = TAROT_DETAILS[name] || LENORMAND_DETAILS[name];
@@ -263,18 +241,15 @@ const App: React.FC = () => {
     });
     const topCardValues = sortedCards.map(([, count]) => count);
 
-    // 趋势统计 (按日分组)
     const dailyCounts: Record<string, number> = {};
     entries.forEach(e => {
       const d = new Date(e.date).toISOString().split('T')[0];
       dailyCounts[d] = (dailyCounts[d] || 0) + 1;
     });
 
-    // 排序日期
     const sortedDates = Object.keys(dailyCounts).sort();
     const trendValues = sortedDates.map(d => dailyCounts[d]);
     
-    // 累计记录统计
     let cumulative = 0;
     const cumulativeValues = sortedDates.map(d => {
       cumulative += dailyCounts[d];
@@ -292,7 +267,6 @@ const App: React.FC = () => {
     };
   }, [state.entries]);
 
-  // ECharts 初始化与更新
   useEffect(() => {
     if (state.currentView !== 'home') return;
 
@@ -385,7 +359,6 @@ const App: React.FC = () => {
     };
   }, [state.currentView, isDark, dashboardStats]);
 
-  // 那年今日 (时光胶囊) 逻辑
   const timeCapsuleEntry = useMemo(() => {
     const today = new Date();
     return state.entries.find(entry => {
@@ -458,7 +431,7 @@ const App: React.FC = () => {
         
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+          model: 'gemini-3-flash-preview',
           contents: [
             {
               parts: [
@@ -641,7 +614,6 @@ const App: React.FC = () => {
       </header>
 
       <main className="max-w-4xl mx-auto p-4 md:p-8">
-        {/* 那年今日 (时光胶囊) */}
         {state.currentView === 'home' && timeCapsuleEntry && (
           <div className={`mb-8 p-6 rounded-2xl border ${isDark ? 'bg-indigo-900/20 border-amber-500/40' : 'bg-white border-amber-400 shadow-lg'} animate-in fade-in zoom-in-95 duration-700 relative overflow-hidden group cursor-pointer`} onClick={() => setState(prev => ({ ...prev, currentView: 'detail', selectedEntryId: timeCapsuleEntry.id }))}>
             <div className="absolute -top-10 -right-10 w-40 h-40 bg-amber-500/10 rounded-full blur-3xl group-hover:bg-amber-500/20 transition-all"></div>
@@ -668,7 +640,6 @@ const App: React.FC = () => {
 
         {state.currentView === 'home' && (
           <div className={`${isDark ? 'bg-slate-900/60 border-amber-500/20' : 'bg-white border-stone-200 shadow-sm'} border backdrop-blur-lg rounded-2xl p-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500`}>
-            {/* 顶层统计摘要 */}
             <div className="flex flex-col md:flex-row justify-around items-center gap-6 mb-8">
               <div className="text-center group">
                 <div className="text-amber-400 font-mystic font-bold text-3xl group-hover:scale-110 transition-transform">{dashboardStats.uniqueDays}</div>
@@ -690,7 +661,6 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* 图表展示区 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className={`p-4 rounded-xl ${isDark ? 'bg-black/20 border border-white/5' : 'bg-stone-50 border border-stone-100'}`}>
                 <h4 className={`text-[10px] uppercase tracking-widest font-mystic mb-2 text-center ${isDark ? 'text-indigo-300' : 'text-stone-600'}`}>高频牌分布 (Top 5)</h4>
@@ -962,21 +932,33 @@ const App: React.FC = () => {
         {showPicker && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setShowPicker(false)}></div>
-            <div className={`relative ${isDark ? 'bg-slate-900 border-indigo-500/30' : 'bg-stone-50 border-stone-300'} border w-full max-w-4xl max-h-[90vh] rounded-3xl flex flex-col overflow-hidden shadow-2xl`}>
-              <div className={`p-6 border-b ${isDark ? 'border-indigo-900/50 bg-slate-950/50' : 'border-stone-200 bg-stone-100/50'} flex justify-between items-center`}>
+            <div className={`relative ${isDark ? 'bg-slate-900 border-indigo-500/30' : 'bg-stone-50 border-stone-300'} border w-full max-w-4xl max-h-[90vh] rounded-3xl flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300`}>
+              <div className={`p-6 border-b ${isDark ? 'border-indigo-900/50 bg-slate-950/50' : 'border-stone-200 bg-stone-100/50'} flex justify-between items-center sticky top-0 z-10`}>
                 <h3 className={`font-mystic ${isDark ? 'text-indigo-200' : 'text-stone-800'} tracking-widest`}>选择牌面 🎴</h3>
-                <button onClick={() => setShowPicker(false)} className="text-slate-400 hover:text-indigo-500 text-xl">✕</button>
+                <button onClick={() => setShowPicker(false)} className="text-slate-400 hover:text-indigo-500 text-xl p-2 active:scale-90 transition-all">✕</button>
               </div>
+
               {formData.deckType === DeckType.TAROT && (
-                <div className={`flex border-b ${isDark ? 'border-indigo-900/20 bg-slate-900/50' : 'border-stone-200 bg-stone-50'} no-scrollbar overflow-x-auto`}>
-                  {['major', 'wands', 'cups', 'swords', 'pentacles'].map(tab => (
-                    <button key={tab} onClick={() => setActiveTarotTab(tab as any)} className={`px-6 py-4 text-[10px] uppercase tracking-widest whitespace-nowrap transition-all ${activeTarotTab === tab ? (isDark ? 'text-indigo-400 border-b-2 border-indigo-500' : 'text-stone-800 border-b-2 border-stone-800') : 'text-slate-500'}`}>
-                      {tab === 'major' ? '大阿卡纳' : tab === 'wands' ? '权杖' : tab === 'cups' ? '圣杯' : tab === 'swords' ? '宝剑' : '星币'}
-                    </button>
-                  ))}
+                <div className="relative border-b ${isDark ? 'border-indigo-900/20 bg-slate-900/50' : 'border-stone-200 bg-stone-50'}">
+                  {/* 为手机端增加渐变提示，说明可以横向滑动 */}
+                  <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-slate-950/20 to-transparent pointer-events-none z-10 opacity-50"></div>
+                  <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-950/20 to-transparent pointer-events-none z-10 opacity-50"></div>
+                  
+                  <div className="flex overflow-x-auto no-scrollbar scroll-smooth snap-x">
+                    {['major', 'wands', 'cups', 'swords', 'pentacles'].map(tab => (
+                      <button 
+                        key={tab} 
+                        onClick={() => setActiveTarotTab(tab as any)} 
+                        className={`flex-shrink-0 px-6 py-4 text-[11px] uppercase tracking-widest whitespace-nowrap transition-all snap-start ${activeTarotTab === tab ? (isDark ? 'text-indigo-400 border-b-2 border-indigo-500 font-bold' : 'text-stone-800 border-b-2 border-stone-800 font-bold') : 'text-slate-500 opacity-60'}`}
+                      >
+                        {tab === 'major' ? '大阿卡纳' : tab === 'wands' ? '权杖' : tab === 'cups' ? '圣杯' : tab === 'swords' ? '宝剑' : '星币'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
-              <div className={`p-6 overflow-y-auto grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-6 ${isDark ? 'bg-slate-950/20' : 'bg-stone-100/20'}`}>
+
+              <div className={`p-6 overflow-y-auto grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-6 ${isDark ? 'bg-slate-950/20' : 'bg-stone-100/20'} flex-1 custom-scrollbar`}>
                 {(formData.deckType === DeckType.TAROT ? TAROT_CARDS[activeTarotTab] : LENORMAND_CARDS).map(name => {
                   const sel = formData.selectedCards.find(c => c.name === name);
                   return (
@@ -987,13 +969,17 @@ const App: React.FC = () => {
                       <CardBack type={formData.deckType} name={name} isReversed={sel?.isReversed} color={formData.lenormandColor} theme={state.theme} />
                       {!!sel && <div className={`absolute inset-0 border-2 ${isDark ? 'border-indigo-500' : 'border-stone-800'} rounded-lg pointer-events-none shadow-[0_0_15px_rgba(99,102,241,0.5)]`}></div>}
                       {!!sel && formData.deckType === DeckType.TAROT && (
-                        <button onClick={(e) => { e.stopPropagation(); setFormData(p => ({ ...p, selectedCards: p.selectedCards.map(c => c.name === name ? { ...c, isReversed: !c.isReversed } : c) })); }} className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-indigo-600 border border-white/20 text-[8px] px-2 py-0.5 rounded-full shadow-xl z-50 font-bold text-white">{sel.isReversed ? '逆' : '正'}</button>
+                        <button onClick={(e) => { e.stopPropagation(); setFormData(p => ({ ...p, selectedCards: p.selectedCards.map(c => c.name === name ? { ...c, isReversed: !c.isReversed } : c) })); }} className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-indigo-600 border border-white/20 text-[8px] px-2 py-0.5 rounded-full shadow-xl z-50 font-bold text-white whitespace-nowrap">
+                          {sel.isReversed ? '点击转正位' : '点击转逆位'}
+                        </button>
                       )}
                     </div>
                   );
                 })}
               </div>
-              <div className={`p-6 border-t ${isDark ? 'border-indigo-900/50 bg-slate-950' : 'border-stone-200 bg-stone-100'} flex justify-end gap-4`}><MysticButton onClick={() => setShowPicker(false)}>确定牌面</MysticButton></div>
+              <div className={`p-6 border-t ${isDark ? 'border-indigo-900/50 bg-slate-950' : 'border-stone-200 bg-stone-100'} flex justify-end gap-4 shadow-[0_-10px_20px_rgba(0,0,0,0.1)]`}>
+                <MysticButton onClick={() => setShowPicker(false)}>确定牌面 ({formData.selectedCards.length})</MysticButton>
+              </div>
             </div>
           </div>
         )}
@@ -1003,7 +989,7 @@ const App: React.FC = () => {
       
       {state.currentView === 'home' && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
-          <button onClick={() => setState(prev => ({ ...prev, currentView: 'create' }))} className={`w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-3xl border-4 ${isDark ? 'bg-indigo-600 border-slate-900' : 'bg-stone-800 border-stone-100 text-white'} active:scale-90 transition-all hover:scale-105`}>🎴</button>
+          <button onClick={() => setState(prev => ({ ...prev, currentView: 'create' }))} className={`w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-3xl border-4 ${isDark ? 'bg-indigo-600 border-slate-900' : 'bg-stone-800 border-stone-100 text-white'} active:scale-90 transition-all hover:scale-110 active:shadow-indigo-500/50`}>🎴</button>
         </div>
       )}
     </div>
