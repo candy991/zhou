@@ -1,0 +1,8 @@
+{
+  "name": "Copy of MysticJournal - Tarot & Lenormand Diary",
+  "description": "A personal sanctuary to record and analyze your daily Tarot and Lenormand spreads with AI-assisted insights and photo storage.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
