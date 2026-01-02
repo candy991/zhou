@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DeckType, ReadingEntry, AppState, SelectedCard, ThemeMode, LenormandColor } from './types';
 import { loadEntries, saveEntries } from './services/storage';
@@ -41,6 +40,15 @@ const LENORMAND_THEMES: Record<LenormandColor, string> = {
 };
 
 const PRESET_TAGS = ['❤️ 感情', '💰 事业', '🎓 学业', '🧘‍♀️ 灵性', '🏠 生活'];
+
+// 定义字体选项
+const FONT_OPTIONS = [
+  { id: 'sans', name: '标准', class: 'font-sans' },
+  { id: 'serif', name: '衬线', class: 'font-serif' },
+  { id: 'mono', name: '代码', class: 'font-mono' },
+  // 模拟手写体，通常系统自带 cursive
+  { id: 'cursive', name: '手写', class: 'italic' },
+];
 
 const CardBack: React.FC<{ 
   type: DeckType; 
@@ -87,7 +95,10 @@ const CardBack: React.FC<{
           alt={name} 
           loading="eager" 
           onLoad={() => setIsLoaded(true)}
-          onError={() => setImgError(true)}
+          onError={() => {
+             // 图片加载失败时，显示默认样式
+             setImgError(true);
+          }}
           className={`w-full h-full object-cover transition-all duration-700 ${isLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-105'} ${theme === 'dark' ? 'grayscale-[0.2] group-hover:grayscale-0' : 'grayscale-0'}`} 
         />
       ) : (
@@ -149,6 +160,7 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTarotTab, setActiveTarotTab] = useState<keyof typeof TAROT_CARDS>('major');
   const [activeInfoCard, setActiveInfoCard] = useState<{name: string, isReversed: boolean} | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
   
   const barChartRef = useRef<HTMLDivElement>(null);
   const lineChartRef = useRef<HTMLDivElement>(null);
@@ -158,10 +170,14 @@ const App: React.FC = () => {
     return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
   };
 
+  // 扩展表单数据，增加 title, font, id (用于编辑模式)
   const [formData, setFormData] = useState<{ 
+    id?: string; // 如果有id，说明是编辑模式
     deckType: DeckType; 
     image: string; 
+    title: string; // 新增标题
     notes: string; 
+    font: string; // 新增字体设置
     selectedCards: SelectedCard[]; 
     lenormandColor: LenormandColor; 
     tag?: string;
@@ -169,7 +185,9 @@ const App: React.FC = () => {
   }>({
     deckType: DeckType.TAROT, 
     image: '', 
+    title: '',
     notes: '', 
+    font: 'sans',
     selectedCards: [], 
     lenormandColor: 'default', 
     tag: undefined,
@@ -195,12 +213,19 @@ const App: React.FC = () => {
     const rawEntries = loadEntries();
     const sanitizedEntries = rawEntries.map(entry => ({
       ...entry,
+      title: (entry as any).title || '', // 兼容旧数据
+      font: (entry as any).font || 'sans', // 兼容旧数据
       tag: entry.tag || undefined,
       selectedCards: entry.selectedCards || [],
       moonPhase: entry.moonPhase || undefined
     }));
     setState(prev => ({ ...prev, entries: sanitizedEntries }));
   }, []);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
 
   const selectedEntry = state.entries.find(e => e.id === state.selectedEntryId);
   const isDark = state.theme === 'dark';
@@ -378,6 +403,7 @@ const App: React.FC = () => {
     return state.entries.filter(e => 
       e.notes.toLowerCase().includes(query) || 
       e.tag?.toLowerCase().includes(query) ||
+      (e as any).title?.toLowerCase().includes(query) || // 支持搜标题
       e.selectedCards?.some(c => c.name.toLowerCase().includes(query))
     );
   }, [state.entries, searchQuery]);
@@ -385,27 +411,95 @@ const App: React.FC = () => {
   const handleSaveEntry = () => {
     const dateToSave = new Date(formData.readingDate);
     const newEntry: ReadingEntry = {
-      id: Date.now().toString(), 
+      id: formData.id || Date.now().toString(), // 如果有id则使用（编辑），没有则新建
       date: dateToSave.toISOString(), 
       deckType: formData.deckType,
       image: formData.image, 
+      title: formData.title, // 保存标题
       notes: formData.notes, 
+      font: formData.font, // 保存字体设置
       selectedCards: formData.selectedCards,
       lenormandColor: formData.lenormandColor, 
       tag: formData.tag,
       moonPhase: getMoonPhase(dateToSave)
     };
-    const updated = [newEntry, ...state.entries];
-    setState(prev => ({ ...prev, entries: updated, currentView: 'home' }));
-    saveEntries(updated);
+
+    let updatedEntries;
+    if (formData.id) {
+      // 编辑模式：替换原有记录
+      updatedEntries = state.entries.map(e => e.id === formData.id ? newEntry : e);
+    } else {
+      // 新建模式
+      updatedEntries = [newEntry, ...state.entries];
+    }
+
+    setState(prev => ({ ...prev, entries: updatedEntries, currentView: 'home' }));
+    saveEntries(updatedEntries);
+    
+    // 重置表单
     setFormData({ 
+      id: undefined,
       deckType: DeckType.TAROT, 
       image: '', 
+      title: '',
       notes: '', 
+      font: 'sans',
       selectedCards: [], 
       lenormandColor: 'default', 
       tag: undefined,
       readingDate: getLocalISOString(new Date())
+    });
+  };
+
+  // 处理编辑点击
+  const handleEditEntry = (entry: ReadingEntry) => {
+    const localDate = getLocalISOString(new Date(entry.date));
+    setFormData({
+      id: entry.id,
+      deckType: entry.deckType,
+      image: entry.image || '',
+      title: (entry as any).title || '',
+      notes: entry.notes,
+      font: (entry as any).font || 'sans',
+      selectedCards: entry.selectedCards || [],
+      lenormandColor: entry.lenormandColor || 'default',
+      tag: entry.tag,
+      readingDate: localDate
+    });
+    setState(prev => ({ ...prev, currentView: 'create' }));
+  };
+
+  // 复制给 AI 分析
+  const handleCopyForAI = (entry: ReadingEntry) => {
+    const deckTypeName = entry.deckType === DeckType.TAROT ? '塔罗牌' : '雷诺曼';
+    const titleText = (entry as any).title ? `主题：${(entry as any).title}` : '';
+    const questionText = entry.tag ? `分类：${entry.tag}` : '';
+    
+    // 构建纯文本的牌面列表，不包含特殊符号
+    const cardsText = (entry.selectedCards || []).map((c, i) => {
+      const detail = entry.deckType === DeckType.TAROT ? TAROT_DETAILS[c.name] : LENORMAND_DETAILS[c.name];
+      const nameZh = detail?.zh || c.name;
+      const status = entry.deckType === DeckType.TAROT ? (c.isReversed ? " (逆位)" : " (正位)") : "";
+      return `${i + 1}. ${nameZh}${status}`;
+    }).join('\n');
+
+    const prompt = `你好，我是神秘学爱好者。
+我刚才进行了一次${deckTypeName}占卜。
+${titleText}
+${questionText}
+
+我的记录/心得：
+${entry.notes}
+
+抽到的牌如下：
+${cardsText}
+
+请帮我进行深度解读，并给出建议。`;
+
+    navigator.clipboard.writeText(prompt).then(() => {
+      showToast("✅ 已复制分析指令！快去发给 AI 吧");
+    }).catch(() => {
+      showToast("❌ 复制失败，请手动复制");
     });
   };
 
@@ -421,11 +515,12 @@ const App: React.FC = () => {
 
   const exportToCSV = () => {
     if (filteredEntries.length === 0) return alert("当前视图无数据可导出。");
-    const headers = ["日期", "类型", "问题(标签)", "月相", "抽到的牌", "笔记/心得"];
+    const headers = ["日期", "类型", "标题", "标签", "月相", "抽到的牌", "笔记/心得"];
     const rows = filteredEntries.map(entry => {
       const date = formatFullDate(entry.date);
       const type = entry.deckType === DeckType.TAROT ? "塔罗" : "雷诺曼";
-      const problem = entry.tag || "";
+      const title = (entry as any).title || "";
+      const tag = entry.tag || "";
       const moon = entry.moonPhase ? `${entry.moonPhase.emoji} ${entry.moonPhase.name}` : "";
       const cards = entry.selectedCards?.map(c => {
         const detail = entry.deckType === DeckType.TAROT ? TAROT_DETAILS[c.name] : LENORMAND_DETAILS[c.name];
@@ -433,7 +528,7 @@ const App: React.FC = () => {
         return cardName + (c.isReversed ? "(逆位)" : "");
       }).join('; ') || "";
       const notes = entry.notes.replace(/"/g, '""');
-      return [date, type, problem, moon, cards, notes].map(field => `"${field}"`).join(',');
+      return [date, type, title, tag, moon, cards, notes].map(field => `"${field}"`).join(',');
     });
     const csvContent = "\uFEFF" + [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -454,6 +549,8 @@ const App: React.FC = () => {
         const imported: ReadingEntry[] = JSON.parse(event.target?.result as string);
         const sanitized = imported.map(entry => ({
           ...entry,
+          title: (entry as any).title || '',
+          font: (entry as any).font || 'sans',
           tag: entry.tag || undefined,
           selectedCards: entry.selectedCards || [],
           moonPhase: entry.moonPhase || undefined
@@ -482,8 +579,23 @@ const App: React.FC = () => {
     });
   };
 
+  // 根据选择的字体获取实际类名
+  const getFontClass = (fontId: string) => {
+    const font = FONT_OPTIONS.find(f => f.id === fontId);
+    return font ? font.class : 'font-sans';
+  };
+
   return (
     <div className={`min-h-screen transition-colors duration-500 pb-24 ${isDark ? 'bg-slate-950 text-slate-200' : 'bg-stone-100 text-stone-900'}`}>
+      
+      {toastMsg && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-4 fade-in duration-300">
+          <div className="bg-emerald-600 text-white px-6 py-2 rounded-full shadow-2xl text-sm font-bold flex items-center gap-2">
+            {toastMsg}
+          </div>
+        </div>
+      )}
+
       <header className={`p-6 text-center border-b ${isDark ? 'border-indigo-900/30 bg-slate-900/50' : 'border-stone-300 bg-white/50'} backdrop-blur-md sticky top-0 z-50 flex items-center justify-between px-10`}>
         <div className="w-10"></div>
         <div>
@@ -560,7 +672,7 @@ const App: React.FC = () => {
           <div className="space-y-8 animate-in fade-in duration-500">
             <div className="flex flex-col md:flex-row gap-4 items-center">
               <div className="relative flex-1 w-full">
-                <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="检索记录、标签或牌名..." className={`w-full ${isDark ? 'bg-slate-800/40 border-indigo-900/30 text-white' : 'bg-white border-stone-300'} border rounded-2xl py-3 px-12 text-sm focus:outline-none focus:border-indigo-500 transition-all`} />
+                <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="检索标题、笔记或牌名..." className={`w-full ${isDark ? 'bg-slate-800/40 border-indigo-900/30 text-white' : 'bg-white border-stone-300'} border rounded-2xl py-3 px-12 text-sm focus:outline-none focus:border-indigo-500 transition-all`} />
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 opacity-30">🔍</span>
               </div>
               <div className="flex gap-2">
@@ -574,7 +686,22 @@ const App: React.FC = () => {
 
             <div className="flex justify-between items-center relative">
               <h2 className={`text-xl font-mystic ${isDark ? 'text-indigo-100' : 'text-stone-800'} flex items-center gap-3`}>历史星迹记录</h2>
-              <MysticButton onClick={() => setState(prev => ({ ...prev, currentView: 'create' }))}>+ 启程抽牌</MysticButton>
+              <MysticButton onClick={() => {
+                // 重置表单以进行新记录
+                setFormData({ 
+                   id: undefined,
+                   deckType: DeckType.TAROT, 
+                   image: '', 
+                   title: '',
+                   notes: '', 
+                   font: 'sans',
+                   selectedCards: [], 
+                   lenormandColor: 'default', 
+                   tag: undefined,
+                   readingDate: getLocalISOString(new Date())
+                });
+                setState(prev => ({ ...prev, currentView: 'create' }));
+              }}>+ 启程抽牌</MysticButton>
             </div>
 
             {filteredEntries.length === 0 ? (
@@ -603,7 +730,8 @@ const App: React.FC = () => {
                         <span className={`text-[10px] ${isDark ? 'text-indigo-400' : 'text-stone-500'} font-mystic uppercase`}>{entry.deckType}</span>
                         <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-stone-400'} font-serif`}>{formatFullDate(entry.date)}</span>
                       </div>
-                      <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-stone-700'} line-clamp-2 italic`}>{entry.notes || "无言的灵感记录"}</p>
+                      <h4 className={`text-sm font-bold truncate mb-1 ${(entry as any).title ? (isDark ? 'text-indigo-200' : 'text-stone-800') : 'text-transparent'}`}>{(entry as any).title || '无标题'}</h4>
+                      <p className={`text-xs ${isDark ? 'text-slate-300' : 'text-stone-700'} line-clamp-2 italic`}>{entry.notes || "无言的灵感记录"}</p>
                     </div>
                   </div>
                 ))}
@@ -616,7 +744,7 @@ const App: React.FC = () => {
           <div className={`${isDark ? 'bg-slate-900/80 border-indigo-800/30' : 'bg-white border-stone-300'} p-6 rounded-3xl border shadow-2xl relative animate-in zoom-in-95 duration-300`}>
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b ${isDark ? 'border-indigo-900/20' : 'border-stone-100'} pb-4">
               <div className="flex flex-col gap-2 flex-1">
-                <h2 className={`text-2xl font-mystic ${isDark ? 'text-indigo-100' : 'text-stone-900'}`}>星迹捕获</h2>
+                <h2 className={`text-2xl font-mystic ${isDark ? 'text-indigo-100' : 'text-stone-900'}`}>{formData.id ? '编辑星迹' : '星迹捕获'}</h2>
                 <div className={`flex flex-col gap-1 p-2 rounded-lg ${isDark ? 'bg-black/20' : 'bg-stone-50 border border-stone-200'}`}>
                   <label className={`text-[8px] uppercase tracking-widest ${isDark ? 'text-indigo-400' : 'text-stone-500'} font-bold`}>设定时间</label>
                   <div className="flex items-center gap-3">
@@ -672,29 +800,62 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <label className={`block text-[10px] ${isDark ? 'text-indigo-400' : 'text-stone-500'} uppercase tracking-widest font-mystic`}>分类标签 (Tags)</label>
-                <div className="flex flex-wrap gap-2">
-                  {PRESET_TAGS.map(tag => (
-                    <button 
-                      key={tag} 
-                      onClick={() => setFormData(p => ({ ...p, tag: p.tag === tag ? undefined : tag }))}
-                      className={`px-4 py-2 rounded-full text-xs transition-all border ${formData.tag === tag ? 'bg-indigo-600 border-indigo-400 text-white shadow-[0_0_10px_rgba(79,70,229,0.3)]' : (isDark ? 'bg-slate-950 border-slate-800 text-slate-400 hover:border-indigo-800' : 'bg-white border-stone-200 text-stone-600 hover:border-stone-400')}`}
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
+              {/* 标题和标签输入区 */}
+              <div className="space-y-4">
+                 <div className="flex flex-col gap-2">
+                    <label className={`block text-[10px] ${isDark ? 'text-indigo-400' : 'text-stone-500'} uppercase tracking-widest font-mystic`}>主题 / 标题 (Optional)</label>
+                    <input 
+                      type="text" 
+                      value={formData.title} 
+                      onChange={(e) => setFormData(p => ({ ...p, title: e.target.value }))}
+                      placeholder="例如：关于未来的职业选择..."
+                      className={`w-full ${isDark ? 'bg-slate-950 border-indigo-900/30 text-white' : 'bg-white border-stone-300 text-stone-900'} border rounded-xl p-3 focus:outline-none focus:border-indigo-500 transition-all text-sm`} 
+                    />
+                 </div>
+                 
+                 <div className="flex flex-col gap-2">
+                    <label className={`block text-[10px] ${isDark ? 'text-indigo-400' : 'text-stone-500'} uppercase tracking-widest font-mystic`}>分类标签 (Tags)</label>
+                    <div className="flex flex-wrap gap-2">
+                      {PRESET_TAGS.map(tag => (
+                        <button 
+                          key={tag} 
+                          onClick={() => setFormData(p => ({ ...p, tag: p.tag === tag ? undefined : tag }))}
+                          className={`px-4 py-2 rounded-full text-xs transition-all border ${formData.tag === tag ? 'bg-indigo-600 border-indigo-400 text-white shadow-[0_0_10px_rgba(79,70,229,0.3)]' : (isDark ? 'bg-slate-950 border-slate-800 text-slate-400 hover:border-indigo-800' : 'bg-white border-stone-200 text-stone-600 hover:border-stone-400')}`}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                 </div>
               </div>
 
+              {/* 字体选择和笔记区 */}
               <div className="space-y-2">
-                <label className={`block text-[10px] ${isDark ? 'text-indigo-400' : 'text-stone-500'} uppercase tracking-widest font-mystic`}>解牌心得与记录</label>
-                <textarea value={formData.notes} onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))} placeholder="在此记录你的问题、直觉和心得..." className={`w-full h-40 ${isDark ? 'bg-slate-950 border-indigo-900/30 text-white' : 'bg-white border-stone-300 text-stone-900'} border rounded-2xl p-4 focus:outline-none focus:border-indigo-500 transition-all resize-none italic font-serif`} />
+                <div className="flex justify-between items-end">
+                  <label className={`block text-[10px] ${isDark ? 'text-indigo-400' : 'text-stone-500'} uppercase tracking-widest font-mystic`}>解牌心得与记录</label>
+                  <div className="flex gap-1">
+                    {FONT_OPTIONS.map(f => (
+                      <button 
+                         key={f.id}
+                         onClick={() => setFormData(p => ({ ...p, font: f.id }))}
+                         className={`text-[9px] px-2 py-1 rounded border ${formData.font === f.id ? (isDark ? 'bg-indigo-600 text-white border-indigo-400' : 'bg-stone-800 text-white border-stone-800') : (isDark ? 'border-slate-800 text-slate-500' : 'border-stone-200 text-stone-400')}`}
+                      >
+                        {f.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <textarea 
+                  value={formData.notes} 
+                  onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))} 
+                  placeholder="在此记录你的问题、直觉和心得..." 
+                  className={`w-full h-40 ${isDark ? 'bg-slate-950 border-indigo-900/30 text-white' : 'bg-white border-stone-300 text-stone-900'} border rounded-2xl p-4 focus:outline-none focus:border-indigo-500 transition-all resize-none ${getFontClass(formData.font)}`} 
+                />
               </div>
               
               <div className="flex gap-4">
                 <MysticButton variant="secondary" className="flex-1" onClick={() => setState(prev => ({ ...prev, currentView: 'home' }))}>取消</MysticButton>
-                <MysticButton className="flex-1" onClick={handleSaveEntry}>保存记录</MysticButton>
+                <MysticButton className="flex-1" onClick={handleSaveEntry}>{formData.id ? '更新记录' : '保存记录'}</MysticButton>
               </div>
             </div>
           </div>
@@ -704,7 +865,10 @@ const App: React.FC = () => {
           <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in duration-500 pb-12">
             <div className="flex items-center justify-between">
               <button onClick={() => setState(prev => ({ ...prev, currentView: 'home' }))} className={`${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-stone-600 hover:text-stone-900'} flex items-center gap-2 text-sm font-mystic tracking-widest`}>← 返回星图</button>
-              <MysticButton variant="danger" className="py-1 px-4 text-[10px]" onClick={() => { if(confirm("确信要移除这段星迹记录吗？")){ const updated = state.entries.filter(e=>e.id!==selectedEntry.id); setState(prev=>({...prev, entries:updated, currentView:'home'})); saveEntries(updated); } }}>删除记录</MysticButton>
+              <div className="flex gap-2">
+                <MysticButton onClick={() => handleEditEntry(selectedEntry)} className="py-1 px-4 text-[10px]" variant="secondary">✏️ 编辑</MysticButton>
+                <MysticButton variant="danger" className="py-1 px-4 text-[10px]" onClick={() => { if(confirm("确信要移除这段星迹记录吗？")){ const updated = state.entries.filter(e=>e.id!==selectedEntry.id); setState(prev=>({...prev, entries:updated, currentView:'home'})); saveEntries(updated); } }}>删除</MysticButton>
+              </div>
             </div>
 
             <div className="space-y-8">
@@ -716,10 +880,23 @@ const App: React.FC = () => {
               )}
 
               {/* 卡片与信息 */}
-              <div className={`${isDark ? 'bg-slate-900/50 border-indigo-900/20' : 'bg-white border-stone-300 shadow-sm'} p-8 rounded-3xl border`}>
-                 <div className="flex justify-between items-start mb-8 pb-4 border-b border-white/5">
+              <div className={`${isDark ? 'bg-slate-900/50 border-indigo-900/20' : 'bg-white border-stone-300 shadow-sm'} p-8 rounded-3xl border relative`}>
+                 <button 
+                   onClick={() => handleCopyForAI(selectedEntry)}
+                   className={`absolute top-4 right-4 text-xs flex items-center gap-1 px-3 py-1.5 rounded-full border transition-all active:scale-95 ${isDark ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/30 hover:bg-indigo-600/40' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100'}`}
+                 >
+                   🤖 AI 分析
+                 </button>
+
+                 <div className="flex justify-between items-start mb-8 pb-4 border-b border-white/5 pr-20">
                    <div className="flex flex-col">
                       <h3 className={`text-[12px] ${isDark ? 'text-indigo-400' : 'text-stone-500'} uppercase tracking-widest font-mystic`}>SPREAD DETAILS</h3>
+                      
+                      {/* 显示标题 */}
+                      <div className={`text-xl font-bold mt-2 ${(entry as any).title ? (isDark ? 'text-indigo-100' : 'text-stone-800') : 'text-transparent hidden'}`}>
+                        {(selectedEntry as any).title}
+                      </div>
+
                       <div className={`text-sm mt-1 font-serif ${isDark ? 'text-slate-300' : 'text-stone-800'}`}>
                          {formatFullDate(selectedEntry.date)}
                       </div>
@@ -755,7 +932,7 @@ const App: React.FC = () => {
 
                  <div>
                     <h3 className={`text-[10px] ${isDark ? 'text-indigo-400' : 'text-stone-500'} uppercase tracking-widest font-mystic mb-4`}>MY NOTES</h3>
-                    <div className={`whitespace-pre-wrap ${isDark ? 'text-slate-300' : 'text-stone-700'} italic text-base font-serif leading-relaxed p-6 rounded-2xl ${isDark ? 'bg-black/20' : 'bg-stone-50 border border-stone-100'}`}>
+                    <div className={`whitespace-pre-wrap ${isDark ? 'text-slate-300' : 'text-stone-700'} text-base leading-relaxed p-6 rounded-2xl ${isDark ? 'bg-black/20' : 'bg-stone-50 border border-stone-100'} ${getFontClass((selectedEntry as any).font)}`}>
                       {selectedEntry.notes || "这一天，星辰选择了沉默。"}
                     </div>
                  </div>
@@ -823,7 +1000,22 @@ const App: React.FC = () => {
       
       {state.currentView === 'home' && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
-          <button onClick={() => setState(prev => ({ ...prev, currentView: 'create' }))} className={`w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-3xl border-4 ${isDark ? 'bg-indigo-600 border-slate-900' : 'bg-stone-800 border-stone-100 text-white'} active:scale-90 transition-all hover:scale-110 active:shadow-indigo-500/50`}>🎴</button>
+          <button onClick={() => {
+              // 重置表单，清空ID以确保是新记录
+              setFormData({ 
+                   id: undefined,
+                   deckType: DeckType.TAROT, 
+                   image: '', 
+                   title: '',
+                   notes: '', 
+                   font: 'sans',
+                   selectedCards: [], 
+                   lenormandColor: 'default', 
+                   tag: undefined,
+                   readingDate: getLocalISOString(new Date())
+              });
+              setState(prev => ({ ...prev, currentView: 'create' }));
+          }} className={`w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-3xl border-4 ${isDark ? 'bg-indigo-600 border-slate-900' : 'bg-stone-800 border-stone-100 text-white'} active:scale-90 transition-all hover:scale-110 active:shadow-indigo-500/50`}>🎴</button>
         </div>
       )}
     </div>
