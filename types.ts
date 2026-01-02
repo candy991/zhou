@@ -1,11 +1,9 @@
-
 export enum DeckType {
-  TAROT = 'TAROT',
-  LENORMAND = 'LENORMAND'
+  TAROT = 'tarot',
+  LENORMAND = 'lenormand'
 }
 
-export type ThemeMode = 'light' | 'dark';
-
+export type ThemeMode = 'dark' | 'light';
 export type LenormandColor = 'default' | 'water' | 'fire' | 'earth' | 'air' | 'spirit';
 
 export interface SelectedCard {
@@ -13,22 +11,23 @@ export interface SelectedCard {
   isReversed: boolean;
 }
 
-// Added ChatMessage interface to support AI conversation history and responses
-export interface ChatMessage {
-  role: 'user' | 'model';
-  text: string;
+export interface MoonPhase {
+  name: string;
+  emoji: string;
 }
 
 export interface ReadingEntry {
   id: string;
   date: string;
   deckType: DeckType;
-  image?: string; // Base64 string
+  image?: string;
+  title?: string;      // 新增：标题 (加了 ? 表示它是可选的)
+  font?: string;       // 新增：字体
   notes: string;
-  tag?: string; // 预设标签
-  moonPhase?: { name: string; emoji: string }; // 月相信息
-  selectedCards?: SelectedCard[]; // List of manually selected cards
+  selectedCards: SelectedCard[];
   lenormandColor?: LenormandColor;
+  tag?: string;
+  moonPhase?: MoonPhase;
 }
 
 export interface AppState {
