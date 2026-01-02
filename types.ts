@@ -13,21 +13,17 @@ export interface SelectedCard {
   isReversed: boolean;
 }
 
-// Added ChatMessage interface to support AI conversation history and responses
-export interface ChatMessage {
-  role: 'user' | 'model';
-  text: string;
-}
-
 export interface ReadingEntry {
   id: string;
   date: string;
   deckType: DeckType;
+  title?: string;
+  font?: string;
   image?: string; // Base64 string
   notes: string;
-  tag?: string; // 预设标签
-  moonPhase?: { name: string; emoji: string }; // 月相信息
-  selectedCards?: SelectedCard[]; // List of manually selected cards
+  tag?: string;
+  moonPhase?: { name: string; emoji: string };
+  selectedCards?: SelectedCard[];
   lenormandColor?: LenormandColor;
 }
 

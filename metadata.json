@@ -1,6 +1,6 @@
 {
   "name": "MysticJournal - Tarot & Lenormand Diary",
-  "description": "A personal sanctuary to record your daily Tarot and Lenormand spreads with photo storage and moon phase tracking.",
+  "description": "A personal sanctuary to record and analyze your daily Tarot and Lenormand spreads with photo storage.",
   "requestFramePermissions": [
     "camera"
   ]
