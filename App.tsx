@@ -544,9 +544,9 @@ const App: React.FC = () => {
           {entry.image ? (
             <img src={entry.image} className="w-full h-full object-cover rounded-xl transition-transform duration-700 group-hover:scale-105 pointer-events-none" />
           ) : (
-            <div className="flex justify-center items-center w-full px-4 pointer-events-none">
+            <div className="flex justify-center items-center w-full px-4 pointer-events-none transition-all duration-500">
               {entry.selectedCards?.slice(0,3).map((c,i) => (
-                <div key={i} className="w-14 h-20 -mx-4 transition-transform duration-500 group-hover:-translate-y-2" style={{ zIndex: 10 - i }}>
+                <div key={i} className="w-14 h-20 -mx-4 group-hover:mx-1 transition-all duration-500 group-hover:-translate-y-4 group-hover:scale-110" style={{ zIndex: 10 - i }}>
                   <CardBack type={entry.deckType} name={c.name} isReversed={c.isReversed} color={entry.lenormandColor} compact theme={state.theme} />
                 </div>
               ))}
