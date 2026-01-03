@@ -35,7 +35,7 @@ export const LENORMAND_THEME_CONFIG: Record<LenormandColor, { bg: string; text: 
   spirit: { bg: 'from-amber-900 via-yellow-700 to-amber-950', text: 'text-yellow-100', label: '灵性', emoji: '✨' }
 };
 
-const PRESET_TAGS = ['❤️ 感情', '💰 事业', '🎓 学业', '🧘‍♀️ 灵性', '🏠 生活'];
+const INITIAL_DEFAULT_TAGS = ['✨ 每日运势', '❤️ 感情', '💰 事业', '🎓 学业', '🧘‍♀️ 灵性', '🏠 生活'];
 
 // ==========================================
 // 子组件：卡牌显示
@@ -145,6 +145,55 @@ const App: React.FC = () => {
 
   const [activePickerIdx, setActivePickerIdx] = useState<number | null>(null);
 
+  // 标签管理状态
+  const [allTags, setAllTags] = useState<string[]>(() => {
+    const saved = localStorage.getItem('user_custom_tags_ordered');
+    return saved ? JSON.parse(saved) : INITIAL_DEFAULT_TAGS;
+  });
+  const [newTagInput, setNewTagInput] = useState('');
+  const [isManagingTags, setIsManagingTags] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('user_custom_tags_ordered', JSON.stringify(allTags));
+  }, [allTags]);
+
+  const handleAddCustomTag = () => {
+    const trimmed = newTagInput.trim();
+    if (!trimmed) return;
+    if (allTags.includes(`🏷️ ${trimmed}`)) {
+        alert("该标签已存在");
+        return;
+    }
+    const finalTag = `🏷️ ${trimmed}`;
+    setAllTags(prev => [...prev, finalTag]);
+    setNewTagInput('');
+    setFormData(p => ({ ...p, tag: finalTag }));
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    if (window.confirm(`确定要删除标签 "${tag}" 吗？`)) {
+      setAllTags(prev => prev.filter(t => t !== tag));
+      if (formData.tag === tag) setFormData(p => ({ ...p, tag: undefined }));
+      if (activeTagFilter === tag) setActiveTagFilter('全部');
+    }
+  };
+
+  const handleMoveTag = (index: number, direction: 'left' | 'right') => {
+    const nextIndex = direction === 'left' ? index - 1 : index + 1;
+    if (nextIndex < 0 || nextIndex >= allTags.length) return;
+    const newList = [...allTags];
+    [newList[index], newList[nextIndex]] = [newList[nextIndex], newList[index]];
+    setAllTags(newList);
+  };
+
+  // 全局 Lenormand 主题色
+  const [lenormandTheme, setLenormandTheme] = useState<LenormandColor>(() => {
+    return (localStorage.getItem('mystic_lenormand_theme') as LenormandColor) || 'default';
+  });
+
+  // Dashboard 图表分类状态
+  const [chartFilter, setChartFilter] = useState<'all' | 'tarot' | 'lenormand'>('all');
+
   const barChartRef = useRef<HTMLDivElement>(null);
   const lineChartRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -161,7 +210,7 @@ const App: React.FC = () => {
     image: '', 
     notes: '', 
     selectedCards: [] as SelectedCard[], 
-    lenormandColor: 'default' as LenormandColor, 
+    lenormandColor: lenormandTheme, 
     tag: undefined as string | undefined,
     font: 'font-serif',
     readingDate: getLocalISOString(new Date()),
@@ -171,6 +220,32 @@ const App: React.FC = () => {
     cardsPerSide: 3
   });
 
+  // 更新全局颜色及当前表单颜色
+  const updateGlobalLenormandTheme = (color: LenormandColor) => {
+    setLenormandTheme(color);
+    localStorage.setItem('mystic_lenormand_theme', color);
+    setFormData(prev => ({ ...prev, lenormandColor: color }));
+  };
+
+  const resetFormData = (deckType: DeckType = DeckType.TAROT) => {
+    setFormData({ 
+      id: undefined, 
+      deckType, 
+      title: '', 
+      image: '', 
+      notes: '', 
+      selectedCards: [], 
+      lenormandColor: lenormandTheme, 
+      tag: undefined, 
+      font: 'font-serif', 
+      readingDate: getLocalISOString(new Date()), 
+      actualOutcome: '', 
+      accuracyRating: 0, 
+      layoutId: deckType === DeckType.TAROT ? 't-1' : 'l-3', 
+      cardsPerSide: 3 
+    });
+  };
+
   useEffect(() => {
     const data = loadEntries();
     setState(prev => ({ ...prev, entries: data }));
@@ -179,15 +254,26 @@ const App: React.FC = () => {
   const isDark = state.theme === 'dark';
   const selectedEntry = state.entries.find(e => e.id === state.selectedEntryId);
 
-  const dashboardStats = useMemo(() => {
-    const entries = state.entries;
+  // 独立计算 Top Cards 数据
+  const topCardsData = useMemo(() => {
+    const filteredEntries = chartFilter === 'all' 
+      ? state.entries 
+      : state.entries.filter(e => e.deckType === (chartFilter === 'tarot' ? DeckType.TAROT : DeckType.LENORMAND));
+    
     const cardCounts: Record<string, number> = {};
-    entries.forEach(e => e.selectedCards?.forEach(c => {
-      cardCounts[c.name] = (cardCounts[c.name] || 0) + 1;
+    filteredEntries.forEach(e => e.selectedCards?.forEach(c => {
+      if (c.name) {
+        cardCounts[c.name] = (cardCounts[c.name] || 0) + 1;
+      }
     }));
     const sortedCards = Object.entries(cardCounts).sort(([, a], [, b]) => b - a).slice(0, 5);
-    const topCardNames = sortedCards.map(([name]) => (TAROT_DETAILS[name]?.zh || LENORMAND_DETAILS[name]?.zh || name.split(' ')[0]));
-    const topCardValues = sortedCards.map(([, count]) => count);
+    const names = sortedCards.map(([name]) => (TAROT_DETAILS[name]?.zh || LENORMAND_DETAILS[name]?.zh || name.split(' ')[0]));
+    const values = sortedCards.map(([, count]) => count);
+    return { names, values };
+  }, [state.entries, chartFilter]);
+
+  const dashboardStats = useMemo(() => {
+    const entries = state.entries;
     const dailyCounts: Record<string, number> = {};
     entries.forEach(e => {
       const d = new Date(e.date).toISOString().split('T')[0];
@@ -203,18 +289,20 @@ const App: React.FC = () => {
     const sortedDates = allDates.slice(-10);
     const trendValues = sortedDates.map(d => dailyCounts[d]);
     const cumulativeValues = sortedDates.map(d => cumulativeMap[d]);
-    return { total: entries.length, topCardNames, topCardValues, sortedDates, trendValues, cumulativeValues };
+    return { total: entries.length, sortedDates, trendValues, cumulativeValues };
   }, [state.entries]);
 
   useEffect(() => {
     if (state.currentView !== 'home' || state.entries.length === 0 || !barChartRef.current || !lineChartRef.current) return;
+    
     const bar = echarts.init(barChartRef.current);
     bar.setOption({
-      xAxis: { type: 'category', data: dashboardStats.topCardNames, axisLabel: { color: isDark ? '#94a3b8' : '#64748b', fontSize: 10 } },
+      xAxis: { type: 'category', data: topCardsData.names, axisLabel: { color: isDark ? '#94a3b8' : '#64748b', fontSize: 10 } },
       yAxis: { type: 'value', splitLine: { lineStyle: { color: isDark ? '#1e293b' : '#f1f5f9' } } },
-      series: [{ data: dashboardStats.topCardValues, type: 'bar', itemStyle: { color: '#6366f1', borderRadius: [4, 4, 0, 0] } }],
+      series: [{ data: topCardsData.values, type: 'bar', itemStyle: { color: '#6366f1', borderRadius: [4, 4, 0, 0] } }],
       grid: { top: 20, bottom: 40, left: 30, right: 10 }
     });
+
     const line = echarts.init(lineChartRef.current);
     line.setOption({
       tooltip: {
@@ -253,7 +341,7 @@ const App: React.FC = () => {
       grid: { top: 30, bottom: 50, left: 40, right: 15 }
     });
     return () => { bar.dispose(); line.dispose(); };
-  }, [state.currentView, isDark, dashboardStats]);
+  }, [state.currentView, isDark, topCardsData, dashboardStats]);
 
   const filteredEntries = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -286,7 +374,7 @@ const App: React.FC = () => {
     // 确保 selectedCards 数组长度符合布局要求，填充空位
     const layout = SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId);
     let finalCards = [...formData.selectedCards];
-    if (layout) {
+    if (layout && layout.type !== 'free') {
       const requiredCount = layout.type === 'configurable_comparison' ? formData.cardsPerSide * 2 : layout.positions.length;
       while (finalCards.length < requiredCount) {
         finalCards.push({ name: '', isReversed: false });
@@ -318,8 +406,7 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, entries: updated, currentView: 'home' }));
     saveEntries(updated);
     
-    // 重置表单
-    setFormData({ id: undefined, deckType: DeckType.TAROT, title: '', image: '', notes: '', selectedCards: [], lenormandColor: 'default', tag: undefined, font: 'font-serif', readingDate: getLocalISOString(new Date()), actualOutcome: '', accuracyRating: 0, layoutId: 't-1', cardsPerSide: 3 });
+    resetFormData(formData.deckType);
   };
 
   const handleEditEntry = (entry: ReadingEntry) => {
@@ -330,7 +417,7 @@ const App: React.FC = () => {
       image: entry.image || '', 
       notes: entry.notes || '', 
       selectedCards: entry.selectedCards || [], 
-      lenormandColor: entry.lenormandColor || 'default', 
+      lenormandColor: entry.lenormandColor || lenormandTheme, 
       tag: entry.tag, 
       font: entry.font || 'font-serif', 
       readingDate: getLocalISOString(new Date(entry.date)), 
@@ -362,6 +449,7 @@ const App: React.FC = () => {
   };
 
   const handleRandomDraw = (count?: number) => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(15);
     const isTarot = formData.deckType === DeckType.TAROT;
     const pool = isTarot ? Object.keys(TAROT_DETAILS) : Object.keys(LENORMAND_DETAILS);
     const layouts = SPREAD_LAYOUTS[formData.deckType];
@@ -369,7 +457,9 @@ const App: React.FC = () => {
     
     let drawCount = count;
     if (!drawCount) {
-      if (currentLayout.type === 'configurable_comparison') {
+      if (currentLayout.id === 'free') {
+        drawCount = 3; // 自由抽牌默认给3张
+      } else if (currentLayout.type === 'configurable_comparison') {
         drawCount = formData.cardsPerSide * 2;
       } else {
         drawCount = currentLayout.positions.length;
@@ -379,6 +469,27 @@ const App: React.FC = () => {
     const shuffled = [...pool].sort(() => 0.5 - Math.random());
     const drawn = shuffled.slice(0, drawCount).map(name => ({ name, isReversed: isTarot ? Math.random() > 0.5 : false }));
     setFormData(p => ({ ...p, selectedCards: drawn }));
+  };
+
+  const handleCopyShare = (entry: ReadingEntry) => {
+    const cardNames = entry.selectedCards?.filter(c => c.name).map(c => {
+      const details = entry.deckType === DeckType.TAROT ? TAROT_DETAILS[c.name] : LENORMAND_DETAILS[c.name];
+      const nameZh = details?.zh || c.name.split(' ')[0];
+      return `[${nameZh}${c.isReversed ? '(逆)' : ''}]`;
+    }).join(' ') || '未选牌';
+
+    const text = `🔮 占卜记录：${entry.title || '未命名'}
+📅 时间：${new Date(entry.date).toLocaleString()}
+🎴 牌阵：${cardNames}
+📝 解读：
+${entry.notes || '无文字记录'}`;
+
+    navigator.clipboard.writeText(text).then(() => {
+      alert('已整理好占卜记录并复制到剪贴板！');
+    }).catch(err => {
+      console.error('复制失败: ', err);
+      alert('复制失败，请手动选择文字复制。');
+    });
   };
 
   const exportBackup = () => {
@@ -470,8 +581,39 @@ const App: React.FC = () => {
     const isLenormand = (layout.type === DeckType.LENORMAND) || (layout.id === 'two_paths_dynamic' && formData.deckType === DeckType.LENORMAND);
     const isGrandTableau = layout.id === 'l-gt';
     const isComparison = layout.type === 'configurable_comparison';
+    const isFree = layout.type === 'free';
     
     const cardSizeClass = isZen ? 'w-[25vw] sm:w-44 md:w-56' : 'w-16 sm:w-20 md:w-24';
+
+    if (isFree) {
+      return (
+        <div className="flex flex-wrap gap-4 justify-center p-4">
+          {selectedCards.filter(c => c.name).map((card, idx) => (
+            <div key={idx} className={`${cardSizeClass} flex flex-col items-center gap-2 group/item`}>
+              <div className="w-full aspect-[2/3] relative shadow-xl rounded-xl transition-transform hover:scale-105">
+                <CardBack 
+                  type={formData.deckType} 
+                  name={card.name} 
+                  isReversed={card.isReversed} 
+                  color={formData.lenormandColor} 
+                  theme={state.theme} 
+                  onInfoClick={() => onSlotClick(idx)}
+                  showDetailsOnHover={true}
+                />
+              </div>
+            </div>
+          ))}
+          {!isZen && (
+            <div 
+              onClick={() => onSlotClick(selectedCards.length)} 
+              className={`${cardSizeClass} aspect-[2/3] border-2 border-dashed border-white/10 bg-slate-900/40 rounded-xl flex items-center justify-center cursor-pointer hover:bg-slate-900/60 transition-colors group/add`}
+            >
+              <span className="text-3xl opacity-10 group-hover/add:opacity-40 transition-opacity">+</span>
+            </div>
+          )}
+        </div>
+      );
+    }
 
     if (isComparison) {
       const groups = layout.groups || ['A', 'B'];
@@ -497,7 +639,7 @@ const App: React.FC = () => {
                                 isReversed={card.isReversed} 
                                 color={formData.lenormandColor} 
                                 theme={state.theme} 
-                                onInfoClick={() => setActiveInfoCard(card)}
+                                onInfoClick={() => onSlotClick(idx)}
                                 showDetailsOnHover={true}
                               />
                            ) : (
@@ -540,7 +682,7 @@ const App: React.FC = () => {
                         isReversed={card.isReversed} 
                         color={formData.lenormandColor} 
                         theme={state.theme} 
-                        onInfoClick={() => setActiveInfoCard(card)}
+                        onInfoClick={() => onSlotClick(idx)}
                         showDetailsOnHover={true}
                       />
                     ) : (
@@ -574,7 +716,7 @@ const App: React.FC = () => {
                       isReversed={card.isReversed} 
                       color={formData.lenormandColor} 
                       theme={state.theme} 
-                      onInfoClick={() => setActiveInfoCard(card)}
+                      onInfoClick={() => onSlotClick(idx)}
                       showDetailsOnHover={true}
                     />
                  ) : (
@@ -602,7 +744,7 @@ const App: React.FC = () => {
         </div>
         <nav className="flex-1 space-y-4">
           <button onClick={() => setState(p => ({ ...p, currentView: 'home' }))} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${state.currentView === 'home' ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-indigo-500/10 opacity-70'}`}>🏠 仪表盘</button>
-          <button onClick={() => { setFormData({ id: undefined, deckType: DeckType.TAROT, title: '', image: '', notes: '', selectedCards: [], lenormandColor: 'default', tag: undefined, font: 'font-serif', readingDate: getLocalISOString(new Date()), actualOutcome: '', accuracyRating: 0, layoutId: 't-1', cardsPerSide: 3 }); setState(p => ({ ...p, currentView: 'create' })); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${state.currentView === 'create' ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-indigo-500/10 opacity-70'}`}>🎴 抽牌记录</button>
+          <button onClick={() => { resetFormData(DeckType.TAROT); setState(p => ({ ...p, currentView: 'create' })); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${state.currentView === 'create' ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-indigo-500/10 opacity-70'}`}>🎴 抽牌记录</button>
           <button onClick={() => setState(p => ({ ...p, currentView: 'archive' }))} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${state.currentView === 'archive' ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-indigo-500/10 opacity-70'}`}>📜 牌灵档案</button>
         </nav>
         <button onClick={toggleTheme} className="mt-auto flex items-center gap-3 px-4 py-3 rounded-xl border border-white/10 hover:bg-white/5 transition-all">{isDark ? '🌙 深邃模式' : '☀️ 纯净模式'}</button>
@@ -616,7 +758,7 @@ const App: React.FC = () => {
 
         <div className="max-w-6xl mx-auto p-6 md:p-10 pb-32">
           {state.currentView === 'archive' && (
-            <CardArchive entries={state.entries} theme={state.theme} />
+            <CardArchive entries={state.entries} theme={state.theme} lenormandColor={lenormandTheme} onColorChange={updateGlobalLenormandTheme} />
           )}
 
           {state.currentView === 'home' && (
@@ -634,7 +776,7 @@ const App: React.FC = () => {
                   </div>
                   <div className="w-px bg-white/5 h-full"></div>
                   <div className="text-center px-4">
-                    <div className="text-xl font-serif font-bold text-amber-500 truncate max-w-[80px]">{dashboardStats.topCardNames[0] || '---'}</div>
+                    <div className="text-xl font-serif font-bold text-amber-500 truncate max-w-[80px]">{topCardsData.names[0] || '---'}</div>
                     <div className="text-[10px] opacity-40 uppercase tracking-widest mt-1 font-bold">高频牌</div>
                   </div>
                 </div>
@@ -642,7 +784,20 @@ const App: React.FC = () => {
               
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className={`p-6 rounded-3xl border ${isDark ? 'bg-slate-900/50 border-white/5' : 'bg-white border-slate-200'}`}>
-                   <h3 className="text-[10px] font-mystic uppercase opacity-40 mb-4 tracking-widest text-center">高频牌分布 (TOP 5)</h3>
+                   <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-[10px] font-mystic uppercase opacity-40 tracking-widest">高频牌分布 (TOP 5)</h3>
+                      <div className="flex bg-slate-900/40 p-0.5 rounded-lg border border-white/5">
+                        {([['all', '全部'], ['tarot', '塔罗'], ['lenormand', '雷诺曼']] as const).map(([val, label]) => (
+                          <button
+                            key={val}
+                            onClick={() => setChartFilter(val)}
+                            className={`px-2 py-1 text-[8px] rounded-md transition-all font-bold ${chartFilter === val ? 'bg-indigo-600 text-white' : 'opacity-40 hover:opacity-100'}`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                   </div>
                    <div ref={barChartRef} className="h-48 w-full"></div>
                 </div>
                 <div className={`p-6 rounded-3xl border ${isDark ? 'bg-slate-900/50 border-white/5' : 'bg-white border-slate-200'}`}>
@@ -669,7 +824,7 @@ const App: React.FC = () => {
                 
                 <div 
                   onClick={() => {
-                    setFormData({ id: undefined, deckType: DeckType.TAROT, title: '', image: '', notes: '', selectedCards: [], lenormandColor: 'default', tag: undefined, font: 'font-serif', readingDate: getLocalISOString(new Date()), actualOutcome: '', accuracyRating: 0, layoutId: 't-1', cardsPerSide: 3 });
+                    resetFormData(DeckType.TAROT);
                     setState(p => ({ ...p, currentView: 'create' }));
                   }}
                   className="relative p-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-blue-900 to-cyan-900 cursor-pointer group hover:scale-[1.02] transition-all shadow-2xl overflow-hidden"
@@ -709,13 +864,13 @@ const App: React.FC = () => {
                    <h3 className="text-xl font-serif font-bold">历史星迹记录</h3>
                    <div className="flex gap-4">
                       <button onClick={() => setIsSelectionMode(!isSelectionMode)} className="px-6 py-2 rounded-full border border-indigo-500/20 text-[10px] font-bold uppercase text-indigo-400 hover:bg-indigo-500/10 transition-all">{isSelectionMode ? '取消选择' : '批量管理'}</button>
-                      {!isSelectionMode && <MysticButton onClick={() => { setFormData({ id: undefined, deckType: DeckType.TAROT, title: '', image: '', notes: '', selectedCards: [], lenormandColor: 'default', tag: undefined, font: 'font-serif', readingDate: getLocalISOString(new Date()), actualOutcome: '', accuracyRating: 0, layoutId: 't-1', cardsPerSide: 3 }); setState(p => ({ ...p, currentView: 'create' })); }}>+ 启程抽牌</MysticButton>}
+                      {!isSelectionMode && <MysticButton onClick={() => { resetFormData(DeckType.TAROT); setState(p => ({ ...p, currentView: 'create' })); }}>+ 启程抽牌</MysticButton>}
                       {isSelectionMode && selectedEntryIds.size > 0 && <MysticButton variant="danger" onClick={handleBulkDelete}>删除选中 ({selectedEntryIds.size})</MysticButton>}
                    </div>
                 </div>
 
                 <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-                  {['全部', ...PRESET_TAGS].map(tag => (
+                  {['全部', ...allTags].map(tag => (
                     <button key={tag} onClick={() => setActiveTagFilter(tag)} className={`px-5 py-2 rounded-full text-xs transition-all whitespace-nowrap border ${activeTagFilter === tag ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-900/40 border-white/5 opacity-40 hover:opacity-100'}`}>{tag}</button>
                   ))}
                 </div>
@@ -772,7 +927,7 @@ const App: React.FC = () => {
                       {(Object.keys(LENORMAND_THEME_CONFIG) as LenormandColor[]).map(color => (
                         <button 
                           key={color} 
-                          onClick={() => setFormData(p => ({ ...p, lenormandColor: color }))} 
+                          onClick={() => updateGlobalLenormandTheme(color)} 
                           className={`px-4 py-2 rounded-xl text-[10px] font-bold border transition-all ${formData.lenormandColor === color ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-950/20 border-white/5 opacity-60 hover:opacity-100'}`}
                         >
                           {LENORMAND_THEME_CONFIG[color].emoji} {LENORMAND_THEME_CONFIG[color].label}
@@ -799,11 +954,43 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="space-y-4">
-                  <label className="text-[10px] uppercase opacity-40 font-bold tracking-widest block px-2">分类标签 (Tags)</label>
+                  <div className="flex justify-between items-center px-2">
+                    <label className="text-[10px] uppercase opacity-40 font-bold tracking-widest">分类标签 (Tags)</label>
+                    <button onClick={() => setIsManagingTags(!isManagingTags)} className={`text-[9px] font-bold px-2 py-0.5 rounded-md border transition-all ${isManagingTags ? 'bg-amber-600 text-white border-amber-500' : 'bg-indigo-600/10 text-indigo-400 border-indigo-500/20'}`}>
+                      {isManagingTags ? '完成整理' : '整理标签'}
+                    </button>
+                  </div>
                   <div className="flex flex-wrap gap-2">
-                    {PRESET_TAGS.map(tag => (
-                      <button key={tag} onClick={() => setFormData(p => ({ ...p, tag: p.tag === tag ? undefined : tag }))} className={`px-4 py-2 rounded-full text-xs border transition-all ${formData.tag === tag ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-900/40 border-white/5 opacity-40 hover:opacity-100'}`}>{tag}</button>
+                    {allTags.map((tag, idx) => (
+                      <div key={tag} className="flex items-center gap-1">
+                        {isManagingTags && (
+                          <div className="flex gap-0.5 mr-0.5">
+                             <button onClick={() => handleMoveTag(idx, 'left')} className="p-1 rounded bg-black/20 text-[8px] hover:bg-black/40">⬅️</button>
+                             <button onClick={() => handleMoveTag(idx, 'right')} className="p-1 rounded bg-black/20 text-[8px] hover:bg-black/40">➡️</button>
+                             {tag.startsWith('🏷️') && <button onClick={() => handleRemoveTag(tag)} className="p-1 rounded bg-red-900/40 text-[8px] hover:bg-red-800 text-white">✖</button>}
+                          </div>
+                        )}
+                        <button 
+                          onClick={() => !isManagingTags && setFormData(p => ({ ...p, tag: p.tag === tag ? undefined : tag }))} 
+                          className={`px-4 py-2 rounded-full text-xs border transition-all ${formData.tag === tag ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-900/40 border-white/5 opacity-40 hover:opacity-100'}`}
+                        >
+                          {tag}
+                        </button>
+                      </div>
                     ))}
+                    {!isManagingTags && (
+                      <div className="flex items-center bg-slate-900/40 border border-white/5 rounded-full px-2 py-0.5 shadow-inner">
+                        <input 
+                          type="text" 
+                          placeholder="+ 自定义" 
+                          value={newTagInput} 
+                          onChange={e => setNewTagInput(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && handleAddCustomTag()}
+                          className="bg-transparent border-none focus:ring-0 text-xs w-20 px-2 py-1"
+                        />
+                        {newTagInput && <button onClick={handleAddCustomTag} className="text-indigo-400 font-bold ml-1 text-lg">✓</button>}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -874,6 +1061,7 @@ const App: React.FC = () => {
                 <div className="flex gap-3">
                   <button onClick={() => setShowSpreadLabels(!showSpreadLabels)} className={`text-[9px] uppercase font-mystic px-4 py-2 rounded-full transition-all border ${showSpreadLabels ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-indigo-600/10 text-indigo-400 border-indigo-500/20'}`}>{showSpreadLabels ? '隐藏标签' : '显示标签'}</button>
                   <MysticButton variant="secondary" className="py-2 px-6 text-[10px] uppercase tracking-widest" onClick={() => setIsZenMode(true)}>✨ 专注/分享</MysticButton>
+                  <MysticButton variant="secondary" className="py-2 px-6 text-[10px] uppercase tracking-widest" onClick={() => handleCopyShare(selectedEntry)}>📋 复制分享</MysticButton>
                   <MysticButton variant="secondary" className="py-2 px-6 text-[10px] uppercase tracking-widest" onClick={() => handleEditEntry(selectedEntry)}>复盘/编辑</MysticButton>
                   <MysticButton variant="danger" className="py-2 px-6 text-[10px] uppercase tracking-widest" onClick={() => handleDeleteSingle(selectedEntry.id)}>销毁档案</MysticButton>
                 </div>
@@ -947,6 +1135,7 @@ const App: React.FC = () => {
                   return (
                     <div key={name} className="relative">
                       <div onClick={() => {
+                        if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(15);
                         const alreadyExists = formData.selectedCards.some(s => s.name === name);
                         if (alreadyExists) {
                           // 如果已经存在，则移除（取消选中）
@@ -955,7 +1144,9 @@ const App: React.FC = () => {
                         } else {
                           // 如果不存在，则追加到末尾
                           const layout = SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId);
-                          const limit = layout?.type === 'configurable_comparison' ? formData.cardsPerSide * 2 : (layout?.positions.length || 1);
+                          const limit = layout?.id === 'free' 
+                            ? (formData.deckType === DeckType.TAROT ? 78 : 36)
+                            : (layout?.type === 'configurable_comparison' ? formData.cardsPerSide * 2 : (layout?.positions.length || 1));
                           
                           if (currentCards.length < limit) {
                             setFormData(p => ({ 

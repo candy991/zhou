@@ -1,14 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { DeckType, ReadingEntry } from '../types';
+import { DeckType, ReadingEntry, LenormandColor } from '../types';
 import { TAROT_DETAILS, LENORMAND_DETAILS, TAROT_CARDS, LENORMAND_CARDS } from '../constants/cards';
-import { CardBack } from '../App';
+import { CardBack, LENORMAND_THEME_CONFIG } from '../App';
 
 interface CardArchiveProps {
   entries: ReadingEntry[];
   theme: 'light' | 'dark';
+  lenormandColor: LenormandColor;
+  onColorChange: (color: LenormandColor) => void;
 }
 
-export const CardArchive: React.FC<CardArchiveProps> = ({ entries, theme }) => {
+export const CardArchive: React.FC<CardArchiveProps> = ({ entries, theme, lenormandColor, onColorChange }) => {
   const [activeSystem, setActiveSystem] = useState<DeckType>(DeckType.TAROT);
   const [tarotFilter, setTarotFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,6 +87,24 @@ export const CardArchive: React.FC<CardArchiveProps> = ({ entries, theme }) => {
         </div>
       </div>
 
+      {/* 雷诺曼专属颜色选择器 */}
+      {activeSystem === DeckType.LENORMAND && (
+        <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-top-2">
+           <label className="text-[10px] uppercase opacity-40 font-bold tracking-widest block">档案色调 (Archive Theme Color)</label>
+           <div className={`p-2 rounded-2xl border flex flex-wrap gap-2 justify-center ${isDark ? 'bg-slate-900/40 border-white/5' : 'bg-white border-slate-100 shadow-sm'}`}>
+              {(Object.keys(LENORMAND_THEME_CONFIG) as LenormandColor[]).map(color => (
+                <button 
+                  key={color} 
+                  onClick={() => onColorChange(color)} 
+                  className={`px-4 py-2 rounded-xl text-[10px] font-bold border transition-all ${lenormandColor === color ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-950/20 border-white/5 opacity-60 hover:opacity-100'}`}
+                >
+                  {LENORMAND_THEME_CONFIG[color].emoji} {LENORMAND_THEME_CONFIG[color].label}
+                </button>
+              ))}
+           </div>
+        </div>
+      )}
+
       {/* 筛选和搜索 */}
       <div className={`p-6 rounded-[2rem] border backdrop-blur-md flex flex-col lg:flex-row gap-6 items-center justify-between ${isDark ? 'bg-slate-900/40 border-white/5' : 'bg-white border-slate-100 shadow-sm'}`}>
         <div className="flex flex-wrap gap-2 justify-center lg:justify-start">
@@ -138,6 +158,7 @@ export const CardArchive: React.FC<CardArchiveProps> = ({ entries, theme }) => {
                 type={activeSystem} 
                 name={name} 
                 theme={theme} 
+                color={activeSystem === DeckType.LENORMAND ? lenormandColor : 'default'}
                 forceStylized={false} 
                 showDetailsOnHover={true}
               />
@@ -170,6 +191,7 @@ export const CardArchive: React.FC<CardArchiveProps> = ({ entries, theme }) => {
                    type={activeSystem} 
                    name={selectedCardName} 
                    theme={theme} 
+                   color={activeSystem === DeckType.LENORMAND ? lenormandColor : 'default'}
                    forceStylized={false} 
                 />
               </div>

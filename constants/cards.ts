@@ -3,7 +3,7 @@ import { DeckType } from "../types";
 export interface SpreadLayout {
   id: string;
   name: string;
-  type: DeckType | 'configurable_comparison';
+  type: DeckType | 'configurable_comparison' | 'free';
   positions: { label: string }[];
   grid?: { rows: number; cols: number };
   groups?: string[];
@@ -18,6 +18,7 @@ export const SPREAD_LAYOUTS: Record<string, SpreadLayout[]> = {
     { id: 't-5', name: '五张牌', type: DeckType.TAROT, positions: [{ label: '现状' }, { label: '挑战' }, { label: '潜意识' }, { label: '目标' }, { label: '近未来' }] },
     { id: 't-cc', name: '凯尔特十字', type: DeckType.TAROT, positions: Array(10).fill(0).map((_, i) => ({ label: `位置 ${i + 1}` })) },
     { id: 'two_paths_dynamic', name: '二路抉择', type: 'configurable_comparison', groups: ['选项 A (Option A)', '选项 B (Option B)'], options: [3, 5], defaultPerSide: 3, positions: [] },
+    { id: 'free', name: '自由抽牌', type: 'free', positions: [] },
   ],
   [DeckType.LENORMAND]: [
     { id: 'l-3', name: '3张线性', type: DeckType.LENORMAND, positions: Array(3).fill(0).map((_, i) => ({ label: `${i + 1}` })), grid: { rows: 1, cols: 3 } },
@@ -25,6 +26,7 @@ export const SPREAD_LAYOUTS: Record<string, SpreadLayout[]> = {
     { id: 'l-9', name: '9宫格', type: DeckType.LENORMAND, positions: Array(9).fill(0).map((_, i) => ({ label: `${i + 1}` })), grid: { rows: 3, cols: 3 } },
     { id: 'l-gt', name: 'Grand Tableau', type: DeckType.LENORMAND, positions: Array(36).fill(0).map((_, i) => ({ label: `${i + 1}` })), grid: { rows: 5, cols: 8 } },
     { id: 'two_paths_dynamic', name: '二路抉择', type: 'configurable_comparison', groups: ['选项 A (Option A)', '选项 B (Option B)'], options: [3, 5], defaultPerSide: 3, positions: [] },
+    { id: 'free', name: '自由抽牌', type: 'free', positions: [] },
   ]
 };
 
