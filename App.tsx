@@ -192,10 +192,22 @@ const App: React.FC = () => {
       const d = new Date(e.date).toISOString().split('T')[0];
       dailyCounts[d] = (dailyCounts[d] || 0) + 1;
     });
-    const sortedDates = Object.keys(dailyCounts).sort().slice(-10);
-    const trendValues = sortedDates.map(d => dailyCounts[d]);
+    
+    // 计算历史所有日期的累计值
+    const allDates = Object.keys(dailyCounts).sort();
+    const cumulativeMap: Record<string, number> = {};
+    let runningTotal = 0;
+    allDates.forEach(d => {
+      runningTotal += dailyCounts[d];
+      cumulativeMap[d] = runningTotal;
+    });
 
-    return { total: entries.length, topCardNames, topCardValues, sortedDates, trendValues };
+    // 只取最近10天展示
+    const sortedDates = allDates.slice(-10);
+    const trendValues = sortedDates.map(d => dailyCounts[d]);
+    const cumulativeValues = sortedDates.map(d => cumulativeMap[d]);
+
+    return { total: entries.length, topCardNames, topCardValues, sortedDates, trendValues, cumulativeValues };
   }, [state.entries]);
 
   useEffect(() => {
@@ -211,10 +223,79 @@ const App: React.FC = () => {
 
     const line = echarts.init(lineChartRef.current!);
     line.setOption({
-      xAxis: { type: 'category', data: dashboardStats.sortedDates, axisLabel: { color: isDark ? '#94a3b8' : '#64748b', fontSize: 10 } },
-      yAxis: { type: 'value', splitLine: { lineStyle: { color: isDark ? '#1e293b' : '#f1f5f9' } } },
-      series: [{ data: dashboardStats.trendValues, type: 'line', smooth: true, itemStyle: { color: '#f59e0b' }, areaStyle: { opacity: 0.1 } }],
-      grid: { top: 20, bottom: 40, left: 30, right: 10 }
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: '#ffffff',
+        borderColor: '#f1f5f9',
+        borderWidth: 1,
+        borderRadius: 8,
+        padding: 12,
+        shadowColor: 'rgba(0, 0, 0, 0.1)',
+        shadowBlur: 10,
+        textStyle: { color: '#334155', fontSize: 12 },
+        formatter: (params: any) => {
+          let html = `<div style="font-weight: 700; margin-bottom: 8px; color: #64748b;">${params[0].name}</div>`;
+          params.forEach((p: any) => {
+            html += `
+              <div style="display: flex; justify-content: space-between; align-items: center; min-width: 140px; margin-bottom: 4px;">
+                <span style="display: flex; align-items: center;">
+                  <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${p.color}; margin-right: 8px;"></span>
+                  <span>${p.seriesName}</span>
+                </span>
+                <span style="font-weight: 700; font-family: monospace; margin-left: 20px;">${p.value}</span>
+              </div>
+            `;
+          });
+          return html;
+        }
+      },
+      legend: {
+        bottom: 0,
+        itemWidth: 12,
+        itemHeight: 12,
+        textStyle: { color: isDark ? '#94a3b8' : '#64748b', fontSize: 10 },
+        data: ['每日抽牌', '累计记录']
+      },
+      xAxis: { 
+        type: 'category', 
+        data: dashboardStats.sortedDates, 
+        axisLabel: { color: isDark ? '#94a3b8' : '#64748b', fontSize: 10 },
+        axisLine: { lineStyle: { color: isDark ? '#1e293b' : '#e2e8f0' } }
+      },
+      yAxis: { 
+        type: 'value', 
+        splitLine: { lineStyle: { color: isDark ? '#1e293b' : '#f1f5f9', type: 'dashed' } },
+        axisLabel: { color: isDark ? '#94a3b8' : '#64748b', fontSize: 10 }
+      },
+      series: [
+        { 
+          name: '每日抽牌',
+          data: dashboardStats.trendValues, 
+          type: 'line', 
+          smooth: true, 
+          symbol: 'circle',
+          symbolSize: 6,
+          itemStyle: { color: '#f59e0b' }, 
+          lineStyle: { width: 3 }
+        },
+        { 
+          name: '累计记录',
+          data: dashboardStats.cumulativeValues, 
+          type: 'line', 
+          smooth: true, 
+          symbol: 'circle',
+          symbolSize: 6,
+          itemStyle: { color: '#6366f1' }, 
+          areaStyle: { 
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: 'rgba(99, 102, 241, 0.3)' },
+              { offset: 1, color: 'rgba(99, 102, 241, 0)' }
+            ])
+          },
+          lineStyle: { width: 3 }
+        }
+      ],
+      grid: { top: 30, bottom: 50, left: 40, right: 15 }
     });
 
     return () => { bar.dispose(); line.dispose(); };
