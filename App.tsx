@@ -216,7 +216,7 @@ const App: React.FC = () => {
     readingDate: getLocalISOString(new Date()),
     actualOutcome: '',
     accuracyRating: 0,
-    layoutId: 't-1',
+    layoutId: 'free', // 默认为自由抽牌
     cardsPerSide: 3
   });
 
@@ -241,7 +241,7 @@ const App: React.FC = () => {
       readingDate: getLocalISOString(new Date()), 
       actualOutcome: '', 
       accuracyRating: 0, 
-      layoutId: deckType === DeckType.TAROT ? 't-1' : 'l-3', 
+      layoutId: 'free', // 默认为自由抽牌 
       cardsPerSide: 3 
     });
   };
@@ -423,7 +423,7 @@ const App: React.FC = () => {
       readingDate: getLocalISOString(new Date(entry.date)), 
       actualOutcome: entry.actualOutcome || '', 
       accuracyRating: entry.accuracyRating || 0, 
-      layoutId: entry.layoutId || (entry.deckType === DeckType.TAROT ? 't-1' : 'l-3'), 
+      layoutId: entry.layoutId || 'free', 
       cardsPerSide: entry.cardsPerSide || 3 
     });
     setState(prev => ({ ...prev, currentView: 'create' }));
@@ -907,7 +907,7 @@ ${entry.notes || '无文字记录'}`;
               <div className="space-y-10">
                 <div className="flex p-1 bg-slate-950/20 rounded-2xl gap-2 border border-white/5">
                   {[DeckType.TAROT, DeckType.LENORMAND].map(t => (
-                    <button key={t} onClick={() => setFormData(p => ({ ...p, deckType: t, selectedCards: [], layoutId: t === DeckType.TAROT ? 't-1' : 'l-3' }))} className={`flex-1 py-3 rounded-xl transition-all font-mystic text-sm uppercase tracking-widest ${formData.deckType === t ? 'bg-indigo-600 text-white shadow-lg' : 'opacity-40 hover:opacity-100'}`}>{t}</button>
+                    <button key={t} onClick={() => setFormData(p => ({ ...p, deckType: t, selectedCards: [], layoutId: 'free' }))} className={`flex-1 py-3 rounded-xl transition-all font-mystic text-sm uppercase tracking-widest ${formData.deckType === t ? 'bg-indigo-600 text-white shadow-lg' : 'opacity-40 hover:opacity-100'}`}>{t}</button>
                   ))}
                 </div>
 
