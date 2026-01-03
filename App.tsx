@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { Home } from 'lucide-react';
 import { DeckType, ReadingEntry, AppState, SelectedCard, ThemeMode, LenormandColor } from './types';
 import { loadEntries, saveEntries } from './services/storage';
 import { MysticButton } from './components/MysticButton';
@@ -149,6 +151,8 @@ const App: React.FC = () => {
   const lineChartRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const location = useLocation();
+
   const getLocalISOString = (date: Date) => {
     const tzOffset = date.getTimezoneOffset() * 60000;
     return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
@@ -175,6 +179,13 @@ const App: React.FC = () => {
     const data = loadEntries();
     setState(prev => ({ ...prev, entries: data }));
   }, []);
+
+  // Sync state with routing
+  useEffect(() => {
+    if (location.pathname === '/') {
+      setState(prev => ({ ...prev, currentView: 'home' }));
+    }
+  }, [location.pathname]);
 
   const isDark = state.theme === 'dark';
   const selectedEntry = state.entries.find(e => e.id === state.selectedEntryId);
@@ -616,7 +627,7 @@ const App: React.FC = () => {
 
         <div className="max-w-6xl mx-auto p-6 md:p-10 pb-32">
           {state.currentView === 'archive' && (
-            <CardArchive entries={state.entries} theme={state.theme} />
+            <CardArchive entries={state.entries} theme={state.theme} onBack={() => setState(p => ({ ...p, currentView: 'home' }))} />
           )}
 
           {state.currentView === 'home' && (
@@ -651,20 +662,21 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* 快速入口区域 */}
+              {/* 快速入口区域 - 找回被删除的部分 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div 
                   onClick={() => setState(p => ({ ...p, currentView: 'archive' }))}
                   className="relative p-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-indigo-900 to-purple-900 cursor-pointer group hover:scale-[1.02] transition-all shadow-2xl overflow-hidden"
                 >
                   <div className="flex items-center gap-6 relative z-10">
-                    <div className="text-5xl group-hover:rotate-12 transition-transform duration-500">📚</div>
+                    <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center group-hover:rotate-12 transition-transform duration-500">
+                      <span className="text-3xl">📚</span>
+                    </div>
                     <div>
-                      <h3 className="text-xl font-serif font-bold text-white">牌灵档案</h3>
+                      <h3 className="text-xl font-serif font-bold text-white tracking-wide">牌灵档案</h3>
                       <p className="text-xs text-indigo-200/60 mt-1">探索 78 张塔罗与 36 张雷诺曼的奥秘</p>
                     </div>
                   </div>
-                  <div className="absolute top-4 right-6 text-4xl opacity-10 pointer-events-none group-hover:scale-125 transition-transform duration-700">🏛️</div>
                 </div>
                 
                 <div 
@@ -675,13 +687,14 @@ const App: React.FC = () => {
                   className="relative p-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-blue-900 to-cyan-900 cursor-pointer group hover:scale-[1.02] transition-all shadow-2xl overflow-hidden"
                 >
                   <div className="flex items-center gap-6 relative z-10">
-                    <div className="text-5xl group-hover:animate-pulse transition-all">✨</div>
+                    <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center group-hover:animate-pulse transition-all">
+                      <span className="text-3xl">✨</span>
+                    </div>
                     <div>
-                      <h3 className="text-xl font-serif font-bold text-white">启程抽牌</h3>
+                      <h3 className="text-xl font-serif font-bold text-white tracking-wide">启程抽牌</h3>
                       <p className="text-xs text-blue-200/60 mt-1">记录当下的直觉与指引</p>
                     </div>
                   </div>
-                  <div className="absolute top-4 right-6 text-4xl opacity-10 pointer-events-none group-hover:scale-125 transition-transform duration-700">🪄</div>
                 </div>
               </div>
 
@@ -745,6 +758,15 @@ const App: React.FC = () => {
 
           {state.currentView === 'create' && (
             <div className={`max-w-4xl mx-auto p-10 rounded-[2.5rem] border shadow-2xl animate-in zoom-in-95 duration-500 ${isDark ? 'bg-slate-900/80 border-white/5 shadow-indigo-500/10' : 'bg-white border-slate-200'}`}>
+              {/* 悬浮回家按钮 - 绝对稳妥版 */}
+              <Link
+                to="/"
+                className="fixed bottom-6 left-6 z-50 p-3 bg-indigo-600 rounded-full shadow-lg text-white hover:bg-indigo-500 transition-all border border-white/20 flex items-center justify-center"
+                aria-label="Back to Dashboard"
+              >
+                <Home size={24} />
+              </Link>
+
               <div className="mb-10 text-center">
                  <h2 className="text-3xl font-serif font-bold mb-2">{formData.id ? '复盘记录' : '捕捉启示'}</h2>
                  <p className="text-xs opacity-50 uppercase tracking-[0.3em] font-mystic">{formData.id ? 'Review & Reflect' : 'Intuition Recording'}</p>
@@ -802,7 +824,7 @@ const App: React.FC = () => {
                   <label className="text-[10px] uppercase opacity-40 font-bold tracking-widest block px-2">分类标签 (Tags)</label>
                   <div className="flex flex-wrap gap-2">
                     {PRESET_TAGS.map(tag => (
-                      <button key={tag} onClick={() => setFormData(p => ({ ...p, tag: p.tag === tag ? undefined : tag }))} className={`px-4 py-2 rounded-full text-xs border transition-all ${formData.tag === tag ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-950/20 border-white/5 opacity-60 hover:opacity-100'}`}>{tag}</button>
+                      <button key={tag} onClick={() => setFormData(p => ({ ...p, tag: p.tag === tag ? undefined : tag }))} className={`px-4 py-2 rounded-full text-xs border transition-all ${formData.tag === tag ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-900/40 border-white/5 opacity-40 hover:opacity-100'}`}>{tag}</button>
                     ))}
                   </div>
                 </div>
