@@ -107,7 +107,7 @@ const CardInfoModal: React.FC<{ cardName: string; type: DeckType; isReversed?: b
   return (
     <div className="fixed inset-0 z-[450] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose}></div>
-      <div className={`relative ${isDark ? 'bg-slate-900 border-indigo-500/30' : 'bg-white border-stone-200'} border w-full max-w-sm rounded-3xl p-8 shadow-2xl animate-in zoom-in-95 duration-200`}>
+      <div className={`relative ${isDark ? 'bg-slate-900 border-indigo-500/30' : 'bg-white border-stone-200'} border w-full max-sm rounded-3xl p-8 shadow-2xl animate-in zoom-in-95 duration-200`}>
         <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-indigo-500">✕</button>
         <div className="text-center mb-6">
           <div className="text-5xl mb-4">{details.emoji || '✨'}</div>
@@ -133,6 +133,9 @@ const App: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState<'ALL' | DeckType>('ALL');
   const [activeTagFilter, setActiveTagFilter] = useState<string>('全部');
   const [homeSubView, setHomeSubView] = useState<'recent' | 'archive'>('recent');
+  
+  // 归档折叠状态
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
 
   const [isZenMode, setIsZenMode] = useState(false);
   const [showSpreadLabels, setShowSpreadLabels] = useState(false);
@@ -216,7 +219,7 @@ const App: React.FC = () => {
     readingDate: getLocalISOString(new Date()),
     actualOutcome: '',
     accuracyRating: 0,
-    layoutId: 'free', // 默认为自由抽牌
+    layoutId: 'free', 
     cardsPerSide: 3
   });
 
@@ -241,7 +244,7 @@ const App: React.FC = () => {
       readingDate: getLocalISOString(new Date()), 
       actualOutcome: '', 
       accuracyRating: 0, 
-      layoutId: 'free', // 默认为自由抽牌 
+      layoutId: 'free', 
       cardsPerSide: 3 
     });
   };
@@ -359,7 +362,9 @@ const App: React.FC = () => {
       return filteredEntries.filter(e => new Date(e.date).getTime() > sevenDaysAgo);
     } else {
       const groups: Record<string, ReadingEntry[]> = {};
-      filteredEntries.forEach(e => {
+      // 归档按照日期倒序排列
+      const sorted = [...filteredEntries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      sorted.forEach(e => {
         const date = new Date(e.date);
         const monthKey = `${date.getFullYear()}年${date.getMonth() + 1}月`;
         if (!groups[monthKey]) groups[monthKey] = [];
@@ -369,9 +374,17 @@ const App: React.FC = () => {
     }
   }, [filteredEntries, homeSubView]);
 
+  const toggleMonthExpansion = (month: string) => {
+    setExpandedMonths(prev => {
+      const next = new Set(prev);
+      if (next.has(month)) next.delete(month);
+      else next.add(month);
+      return next;
+    });
+  };
+
   const handleSaveEntry = () => {
     const d = new Date(formData.readingDate);
-    // 确保 selectedCards 数组长度符合布局要求，填充空位
     const layout = SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId);
     let finalCards = [...formData.selectedCards];
     if (layout && layout.type !== 'free') {
@@ -458,7 +471,7 @@ const App: React.FC = () => {
     let drawCount = count;
     if (!drawCount) {
       if (currentLayout.id === 'free') {
-        drawCount = 3; // 自由抽牌默认给3张
+        drawCount = 3; 
       } else if (currentLayout.type === 'configurable_comparison') {
         drawCount = formData.cardsPerSide * 2;
       } else {
@@ -877,21 +890,40 @@ ${entry.notes || '无文字记录'}`;
 
                 <div className="flex border-b border-white/5 mb-6">
                   <button onClick={() => setHomeSubView('recent')} className={`px-8 py-4 text-xs uppercase tracking-widest font-mystic transition-all border-b-2 ${homeSubView === 'recent' ? 'text-indigo-400 border-indigo-500' : 'opacity-30 border-transparent hover:opacity-60'}`}>近期 (RECENT)</button>
-                  <button onClick={() => setHomeSubView('archive')} className={`px-8 py-4 text-xs uppercase tracking-widest font-mystic transition-all border-b-2 ${homeSubView === 'archive' ? 'text-indigo-400 border-indigo-500' : 'opacity-30 border-transparent hover:opacity-60'}`}>归档 (ARCHIVE)</button>
+                  <button onClick={() => setHomeSubView('archive')} className={`px-8 py-4 text-xs uppercase tracking-widest font-mystic transition-all border-b-2 ${homeSubView === 'archive' ? 'text-indigo-400 border-indigo-500' : 'opacity-30 border-transparent hover:opacity-60'}`}>归档 (MONTHLY ARCHIVE)</button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="space-y-4">
                   {homeSubView === 'recent' ? (
-                    (displayData as ReadingEntry[]).map(renderEntryCard)
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {(displayData as ReadingEntry[]).map(renderEntryCard)}
+                    </div>
                   ) : (
-                    Object.keys(displayData as Record<string, ReadingEntry[]>).map(month => (
-                      <div key={month} className="col-span-full space-y-4">
-                        <div className="font-serif font-bold text-lg opacity-40 px-2">{month}</div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                          {(displayData as Record<string, ReadingEntry[]>)[month].map(renderEntryCard)}
+                    Object.keys(displayData as Record<string, ReadingEntry[]>).map(month => {
+                      const isExpanded = expandedMonths.has(month);
+                      const monthEntries = (displayData as Record<string, ReadingEntry[]>)[month];
+                      return (
+                        <div key={month} className={`rounded-2xl border transition-all duration-300 ${isDark ? 'bg-slate-900/20 border-white/5' : 'bg-white border-slate-100 shadow-sm'} ${isExpanded ? 'ring-2 ring-indigo-500/50' : ''}`}>
+                          <div 
+                            onClick={() => toggleMonthExpansion(month)}
+                            className="flex items-center justify-between p-6 cursor-pointer hover:bg-white/5 transition-colors group"
+                          >
+                            <div className="flex items-center gap-4">
+                              <span className={`transition-transform duration-300 ${isExpanded ? 'rotate-90' : 'rotate-0'} text-indigo-500`}>▶</span>
+                              <h3 className="text-xl font-bold font-serif">{month}</h3>
+                            </div>
+                            <span className="text-xs opacity-40 font-bold">({monthEntries.length} 条记录)</span>
+                          </div>
+                          {isExpanded && (
+                            <div className="px-6 pb-8 animate-in slide-in-from-top-2 fade-in duration-300">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pt-2">
+                                {monthEntries.map(renderEntryCard)}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -1138,11 +1170,9 @@ ${entry.notes || '无文字记录'}`;
                         if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(15);
                         const alreadyExists = formData.selectedCards.some(s => s.name === name);
                         if (alreadyExists) {
-                          // 如果已经存在，则移除（取消选中）
                           const updated = formData.selectedCards.filter(s => s.name !== name);
                           setFormData(p => ({ ...p, selectedCards: updated }));
                         } else {
-                          // 如果不存在，则追加到末尾
                           const layout = SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId);
                           const limit = layout?.id === 'free' 
                             ? (formData.deckType === DeckType.TAROT ? 78 : 36)
