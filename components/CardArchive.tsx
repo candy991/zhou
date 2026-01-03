@@ -1,6 +1,4 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Home } from 'lucide-react';
 import { DeckType, ReadingEntry } from '../types';
 import { TAROT_DETAILS, LENORMAND_DETAILS, TAROT_CARDS, LENORMAND_CARDS } from '../constants/cards';
 import { CardBack } from '../App';
@@ -8,10 +6,9 @@ import { CardBack } from '../App';
 interface CardArchiveProps {
   entries: ReadingEntry[];
   theme: 'light' | 'dark';
-  onBack?: () => void;
 }
 
-export const CardArchive: React.FC<CardArchiveProps> = ({ entries, theme, onBack }) => {
+export const CardArchive: React.FC<CardArchiveProps> = ({ entries, theme }) => {
   const [activeSystem, setActiveSystem] = useState<DeckType>(DeckType.TAROT);
   const [tarotFilter, setTarotFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,18 +67,9 @@ export const CardArchive: React.FC<CardArchiveProps> = ({ entries, theme, onBack
 
   return (
     <div className="animate-in fade-in duration-700 space-y-10 pb-20">
-      {/* 顶部系统切换 + Home 按钮 */}
+      {/* 顶部系统切换 */}
       <div className="flex justify-center">
-        <div className={`inline-flex items-center p-1 rounded-2xl border ${isDark ? 'bg-slate-900 border-white/5' : 'bg-white border-slate-200'} shadow-2xl gap-1`}>
-          {/* Home 按钮 - 已移至此处 */}
-          <Link
-            to="/"
-            className="p-2.5 bg-indigo-600 rounded-xl text-white hover:bg-indigo-500 transition-all flex items-center justify-center shadow-sm"
-            aria-label="Back to Dashboard"
-          >
-            <Home size={18} />
-          </Link>
-
+        <div className={`inline-flex p-1 rounded-2xl border ${isDark ? 'bg-slate-900 border-white/5' : 'bg-white border-slate-200'} shadow-2xl`}>
           {[
             { id: DeckType.TAROT, label: '塔罗牌 (78)', count: 78 },
             { id: DeckType.LENORMAND, label: '雷诺曼 (36)', count: 36 }
@@ -118,7 +106,7 @@ export const CardArchive: React.FC<CardArchiveProps> = ({ entries, theme, onBack
               </button>
             ))
           ) : (
-            <span className="text-[10px] uppercase font-bold tracking-[0.3em] py-2 px-4 opacity-40">经典雷诺曼 36 占卜全集</span>
+            <span className="text-[10px] uppercase opacity-40 font-bold tracking-[0.3em] py-2 px-4">经典雷诺曼 36 占卜全集</span>
           )}
         </div>
 
@@ -134,7 +122,7 @@ export const CardArchive: React.FC<CardArchiveProps> = ({ entries, theme, onBack
         </div>
       </div>
 
-      {/* 画廊网格 */}
+      {/* 画廊网格 - forceStylized={false} 恢复写实风格优先 */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
         {filteredCards.map(name => {
           const detail = activeSystem === DeckType.TAROT ? TAROT_DETAILS[name] : LENORMAND_DETAILS[name];

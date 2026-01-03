@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Home } from 'lucide-react';
 import { DeckType, ReadingEntry, AppState, SelectedCard, ThemeMode, LenormandColor } from './types';
 import { loadEntries, saveEntries } from './services/storage';
 import { MysticButton } from './components/MysticButton';
@@ -151,8 +149,6 @@ const App: React.FC = () => {
   const lineChartRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const location = useLocation();
-
   const getLocalISOString = (date: Date) => {
     const tzOffset = date.getTimezoneOffset() * 60000;
     return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
@@ -179,13 +175,6 @@ const App: React.FC = () => {
     const data = loadEntries();
     setState(prev => ({ ...prev, entries: data }));
   }, []);
-
-  // Sync state with routing
-  useEffect(() => {
-    if (location.pathname === '/') {
-      setState(prev => ({ ...prev, currentView: 'home' }));
-    }
-  }, [location.pathname]);
 
   const isDark = state.theme === 'dark';
   const selectedEntry = state.entries.find(e => e.id === state.selectedEntryId);
@@ -608,7 +597,7 @@ const App: React.FC = () => {
     <div className={`flex min-h-screen ${isDark ? 'bg-slate-950 text-slate-200' : 'bg-slate-50 text-slate-900'} transition-colors duration-500`}>
       <aside className={`hidden md:flex flex-col w-64 border-r sticky top-0 h-screen ${isDark ? 'bg-slate-900 border-white/5' : 'bg-white border-slate-200'} p-6 no-print`}>
         <div className="mb-10 text-center">
-          <h1 className="text-2xl font-mystic tracking-tighter text-indigo-500 uppercase">Mystic Journal</h1>
+          <h1 onClick={() => setState(p => ({ ...p, currentView: 'home' }))} className="text-2xl font-mystic tracking-tighter text-indigo-500 uppercase cursor-pointer hover:opacity-80 transition-opacity">Mystic Journal</h1>
           <p className="text-[10px] opacity-40 uppercase tracking-widest mt-1">Archive of Symbols & Whispers</p>
         </div>
         <nav className="flex-1 space-y-4">
@@ -621,13 +610,13 @@ const App: React.FC = () => {
 
       <main className="flex-1 overflow-x-hidden">
         <header className="md:hidden flex items-center justify-between p-6 border-b border-white/5 bg-slate-900/50 backdrop-blur-md sticky top-0 z-[100] no-print">
-           <h1 className="text-xl font-mystic text-indigo-500 uppercase">Mystic Journal</h1>
+           <h1 onClick={() => setState(p => ({ ...p, currentView: 'home' }))} className="text-xl font-mystic text-indigo-500 uppercase cursor-pointer">Mystic Journal</h1>
            <button onClick={toggleTheme}>{isDark ? '🌙' : '☀️'}</button>
         </header>
 
         <div className="max-w-6xl mx-auto p-6 md:p-10 pb-32">
           {state.currentView === 'archive' && (
-            <CardArchive entries={state.entries} theme={state.theme} onBack={() => setState(p => ({ ...p, currentView: 'home' }))} />
+            <CardArchive entries={state.entries} theme={state.theme} />
           )}
 
           {state.currentView === 'home' && (
@@ -662,21 +651,20 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* 快速入口区域 - 找回被删除的部分 */}
+              {/* 快速入口区域 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div 
                   onClick={() => setState(p => ({ ...p, currentView: 'archive' }))}
                   className="relative p-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-indigo-900 to-purple-900 cursor-pointer group hover:scale-[1.02] transition-all shadow-2xl overflow-hidden"
                 >
                   <div className="flex items-center gap-6 relative z-10">
-                    <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center group-hover:rotate-12 transition-transform duration-500">
-                      <span className="text-3xl">📚</span>
-                    </div>
+                    <div className="text-5xl group-hover:rotate-12 transition-transform duration-500">📚</div>
                     <div>
-                      <h3 className="text-xl font-serif font-bold text-white tracking-wide">牌灵档案</h3>
+                      <h3 className="text-xl font-serif font-bold text-white">牌灵档案</h3>
                       <p className="text-xs text-indigo-200/60 mt-1">探索 78 张塔罗与 36 张雷诺曼的奥秘</p>
                     </div>
                   </div>
+                  <div className="absolute top-4 right-6 text-4xl opacity-10 pointer-events-none group-hover:scale-125 transition-transform duration-700">🏛️</div>
                 </div>
                 
                 <div 
@@ -687,14 +675,13 @@ const App: React.FC = () => {
                   className="relative p-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-blue-900 to-cyan-900 cursor-pointer group hover:scale-[1.02] transition-all shadow-2xl overflow-hidden"
                 >
                   <div className="flex items-center gap-6 relative z-10">
-                    <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center group-hover:animate-pulse transition-all">
-                      <span className="text-3xl">✨</span>
-                    </div>
+                    <div className="text-5xl group-hover:animate-pulse transition-all">✨</div>
                     <div>
-                      <h3 className="text-xl font-serif font-bold text-white tracking-wide">启程抽牌</h3>
+                      <h3 className="text-xl font-serif font-bold text-white">启程抽牌</h3>
                       <p className="text-xs text-blue-200/60 mt-1">记录当下的直觉与指引</p>
                     </div>
                   </div>
+                  <div className="absolute top-4 right-6 text-4xl opacity-10 pointer-events-none group-hover:scale-125 transition-transform duration-700">🪄</div>
                 </div>
               </div>
 
@@ -758,15 +745,6 @@ const App: React.FC = () => {
 
           {state.currentView === 'create' && (
             <div className={`max-w-4xl mx-auto p-10 rounded-[2.5rem] border shadow-2xl animate-in zoom-in-95 duration-500 ${isDark ? 'bg-slate-900/80 border-white/5 shadow-indigo-500/10' : 'bg-white border-slate-200'}`}>
-              {/* 悬浮回家按钮 - 绝对稳妥版 */}
-              <Link
-                to="/"
-                className="fixed bottom-6 left-6 z-50 p-3 bg-indigo-600 rounded-full shadow-lg text-white hover:bg-indigo-500 transition-all border border-white/20 flex items-center justify-center"
-                aria-label="Back to Dashboard"
-              >
-                <Home size={24} />
-              </Link>
-
               <div className="mb-10 text-center">
                  <h2 className="text-3xl font-serif font-bold mb-2">{formData.id ? '复盘记录' : '捕捉启示'}</h2>
                  <p className="text-xs opacity-50 uppercase tracking-[0.3em] font-mystic">{formData.id ? 'Review & Reflect' : 'Intuition Recording'}</p>
@@ -864,20 +842,22 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                   <span className="text-[10px] uppercase opacity-40 font-bold tracking-widest block px-2">解牌笔记 (Notes)</span>
-                   <textarea value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} placeholder="在此记录下你的直觉解读..." className={`w-full h-32 p-6 rounded-3xl border transition-all resize-none text-base leading-relaxed ${isDark ? 'bg-slate-950 border-white/5 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
-                </div>
-
-                {formData.id && (
-                  <div className={`p-8 rounded-3xl border space-y-6 ${isDark ? 'bg-indigo-900/10 border-indigo-500/20' : 'bg-indigo-50/50 border-indigo-100'}`}>
-                    <h3 className="text-sm font-bold font-serif text-indigo-500">✨ 复盘与反馈</h3>
-                    <textarea value={formData.actualOutcome} onChange={e => setFormData(p => ({ ...p, actualOutcome: e.target.value }))} placeholder="事后发生了什么？" className={`w-full h-24 p-4 rounded-2xl border transition-all resize-none text-sm ${isDark ? 'bg-slate-950 border-white/5 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
-                    <div className="flex gap-2">
-                      {[1,2,3,4,5].map(s => <button key={s} onClick={() => setFormData(p => ({ ...p, accuracyRating: s }))} className={`text-2xl ${formData.accuracyRating >= s ? 'text-amber-500 scale-110' : 'text-slate-600 opacity-30'}`}>★</button>)}
+                <div className="space-y-10">
+                   {formData.id && (
+                    <div className={`p-8 rounded-3xl border space-y-6 ${isDark ? 'bg-indigo-900/10 border-indigo-500/20' : 'bg-indigo-50/50 border-indigo-100'}`}>
+                      <h3 className="text-sm font-bold font-serif text-indigo-500">✨ 复盘与反馈</h3>
+                      <textarea value={formData.actualOutcome} onChange={e => setFormData(p => ({ ...p, actualOutcome: e.target.value }))} placeholder="事后发生了什么？" className={`w-full h-24 p-4 rounded-2xl border transition-all resize-none text-sm ${isDark ? 'bg-slate-950 border-white/5 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
+                      <div className="flex gap-2">
+                        {[1,2,3,4,5].map(s => <button key={s} onClick={() => setFormData(p => ({ ...p, accuracyRating: s }))} className={`text-2xl ${formData.accuracyRating >= s ? 'text-amber-500 scale-110' : 'text-slate-600 opacity-30'}`}>★</button>)}
+                      </div>
                     </div>
+                  )}
+
+                  <div className="space-y-4">
+                     <span className="text-[10px] uppercase opacity-40 font-bold tracking-widest block px-2">解牌笔记 (Notes)</span>
+                     <textarea value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} placeholder="在此记录下你的直觉解读..." className={`w-full h-32 p-6 rounded-3xl border transition-all resize-none text-base leading-relaxed ${isDark ? 'bg-slate-950 border-white/5 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
                   </div>
-                )}
+                </div>
 
                 <div className="flex gap-4 pt-6">
                    <button onClick={() => setState(p => ({ ...p, currentView: 'home' }))} className="flex-1 py-4 rounded-full border border-white/10 opacity-60 hover:opacity-100 transition-all text-xs font-bold uppercase tracking-widest">取消</button>
@@ -919,9 +899,9 @@ const App: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div className={`p-8 rounded-[2rem] border leading-relaxed italic font-serif ${isDark ? 'bg-slate-950/40 border-white/5 shadow-inner' : 'bg-slate-50 border-slate-200 shadow-sm'}`}><h4 className="text-[10px] uppercase opacity-30 mb-6 font-bold tracking-[0.3em]">当时解读</h4><div className="whitespace-pre-wrap text-lg opacity-90 leading-loose">{selectedEntry.notes || "无文字记录。"}</div></div>
+                  <div className="grid grid-cols-1 gap-8">
                     {(selectedEntry.actualOutcome || selectedEntry.accuracyRating) && <div className={`p-8 rounded-[2rem] border leading-relaxed italic font-serif ${isDark ? 'bg-indigo-900/10 border-indigo-500/10' : 'bg-indigo-50 border-indigo-100'}`}><div className="flex justify-between items-start mb-6"><h4 className="text-[10px] uppercase text-indigo-500 font-bold tracking-[0.3em]">复盘反思</h4>{selectedEntry.accuracyRating ? <span className="text-amber-500 text-lg">{'★'.repeat(selectedEntry.accuracyRating)}</span> : null}</div><div className="whitespace-pre-wrap text-lg opacity-90 leading-loose text-indigo-400/80">{selectedEntry.actualOutcome || "暂未填写实际结果。"}</div></div>}
+                    <div className={`p-8 rounded-[2rem] border leading-relaxed italic font-serif ${isDark ? 'bg-slate-950/40 border-white/5 shadow-inner' : 'bg-slate-50 border-slate-200 shadow-sm'}`}><h4 className="text-[10px] uppercase opacity-30 mb-6 font-bold tracking-[0.3em]">当时解读</h4><div className="whitespace-pre-wrap text-lg opacity-90 leading-loose">{selectedEntry.notes || "无文字记录。"}</div></div>
                   </div>
               </div>
             </div>
@@ -961,26 +941,32 @@ const App: React.FC = () => {
              {formData.deckType === DeckType.TAROT && <div className="flex overflow-x-auto no-scrollbar border-b border-white/5 bg-black/20">{Object.keys(TAROT_CARDS).map((tab) => <button key={tab} onClick={() => setActiveTarotTab(tab as any)} className={`flex-shrink-0 px-6 md:px-8 py-4 text-[10px] font-bold uppercase transition-all whitespace-nowrap ${activeTarotTab === tab ? 'text-indigo-400 border-indigo-500' : 'opacity-20 hover:opacity-60'}`}>{tab === 'major' ? '大阿卡纳' : tab === 'wands' ? '权杖' : tab === 'cups' ? '圣杯' : tab === 'swords' ? '宝剑' : '星币'}</button>)}</div>}
              <div className="flex-1 overflow-y-auto p-6 md:p-12 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-8 custom-scrollbar">
                 {(formData.deckType === DeckType.TAROT ? TAROT_CARDS[activeTarotTab] : LENORMAND_CARDS).map(name => {
-                  const currentIdx = activePickerIdx !== null ? activePickerIdx : formData.selectedCards.length;
-                  const sel = formData.selectedCards[currentIdx];
-                  const isSelectedHere = sel?.name === name;
+                  const currentCards = formData.selectedCards.filter(c => c.name);
+                  const isSelectedHere = currentCards.some(s => s.name === name);
                   
                   return (
                     <div key={name} className="relative">
                       <div onClick={() => {
-                        const newSelected = [...formData.selectedCards];
-                        const prevReversed = sel?.name === name ? sel.isReversed : false;
-                        newSelected[currentIdx] = { name, isReversed: prevReversed };
-                        setFormData(p => ({ ...p, selectedCards: newSelected }));
-                        
-                        // 雷诺曼选完即关，塔罗需要确认正逆位
-                        if (activePickerIdx !== null && formData.deckType === DeckType.LENORMAND) {
-                          setShowPicker(false);
-                          setActivePickerIdx(null);
+                        const alreadyExists = formData.selectedCards.some(s => s.name === name);
+                        if (alreadyExists) {
+                          // 如果已经存在，则移除（取消选中）
+                          const updated = formData.selectedCards.filter(s => s.name !== name);
+                          setFormData(p => ({ ...p, selectedCards: updated }));
+                        } else {
+                          // 如果不存在，则追加到末尾
+                          const layout = SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId);
+                          const limit = layout?.type === 'configurable_comparison' ? formData.cardsPerSide * 2 : (layout?.positions.length || 1);
+                          
+                          if (currentCards.length < limit) {
+                            setFormData(p => ({ 
+                              ...p, 
+                              selectedCards: [...p.selectedCards.filter(c => c.name), { name, isReversed: false }] 
+                            }));
+                          }
                         }
                       }} className={`relative cursor-pointer transition-all ${isSelectedHere ? 'scale-105 z-10' : 'opacity-50 hover:opacity-100'}`}>
                         <CardBack type={formData.deckType} name={name} compact color={formData.lenormandColor} theme={state.theme} showDetailsOnHover={true} />
-                        {isSelectedHere && <div className="absolute inset-0 border-4 border-indigo-500 rounded-xl pointer-events-none z-20 shadow-[0_0_15px_rgba(99,102,241,0.5)]"></div>}
+                        {isSelectedHere && <div className="absolute inset-0 border-4 border-yellow-400 rounded-xl pointer-events-none z-20 shadow-[0_0_15px_rgba(250,204,21,0.5)]"></div>}
                       </div>
                       
                       {isSelectedHere && formData.deckType === DeckType.TAROT && (
@@ -988,13 +974,12 @@ const App: React.FC = () => {
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              const newSelected = [...formData.selectedCards];
-                              newSelected[currentIdx] = { ...newSelected[currentIdx], isReversed: !newSelected[currentIdx].isReversed };
-                              setFormData(p => ({ ...p, selectedCards: newSelected }));
+                              const updated = formData.selectedCards.map(s => s.name === name ? { ...s, isReversed: !s.isReversed } : s);
+                              setFormData(p => ({ ...p, selectedCards: updated }));
                             }}
-                            className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase transition-all shadow-lg border border-white/10 ${sel.isReversed ? 'bg-amber-600 text-white' : 'bg-indigo-600 text-white'}`}
+                            className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase transition-all shadow-lg border border-white/10 ${formData.selectedCards.find(s => s.name === name)?.isReversed ? 'bg-amber-600 text-white' : 'bg-indigo-600 text-white'}`}
                           >
-                            {sel.isReversed ? '逆位' : '正位'}
+                            {formData.selectedCards.find(s => s.name === name)?.isReversed ? '逆位' : '正位'}
                           </button>
                         </div>
                       )}
