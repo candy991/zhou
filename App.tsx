@@ -3,6 +3,7 @@ import { DeckType, ReadingEntry, AppState, SelectedCard, ThemeMode, LenormandCol
 import { loadEntries, saveEntries } from './services/storage';
 import { MysticButton } from './components/MysticButton';
 import { TAROT_CARDS, LENORMAND_CARDS, TAROT_DETAILS, LENORMAND_DETAILS, SPREAD_LAYOUTS, SpreadLayout } from './constants/cards';
+import { CardArchive } from './components/CardArchive';
 import * as echarts from 'echarts';
 
 // ==========================================
@@ -25,7 +26,7 @@ const getMoonPhase = (date: Date) => {
   return { name: "残月", emoji: "🌘" };
 };
 
-const LENORMAND_THEME_CONFIG: Record<LenormandColor, { bg: string; text: string; label: string; emoji: string }> = {
+export const LENORMAND_THEME_CONFIG: Record<LenormandColor, { bg: string; text: string; label: string; emoji: string }> = {
   default: { bg: 'from-slate-900 via-slate-800 to-slate-950', text: 'text-indigo-300', label: '默认', emoji: '🌑' },
   water: { bg: 'from-blue-900 via-cyan-900 to-blue-950', text: 'text-cyan-200', label: '水象', emoji: '💧' },
   fire: { bg: 'from-red-950 via-orange-900 to-stone-950', text: 'text-orange-200', label: '火象', emoji: '🔥' },
@@ -37,9 +38,9 @@ const LENORMAND_THEME_CONFIG: Record<LenormandColor, { bg: string; text: string;
 const PRESET_TAGS = ['❤️ 感情', '💰 事业', '🎓 学业', '🧘‍♀️ 灵性', '🏠 生活'];
 
 // ==========================================
-// 子组件：卡牌显示 (强化统一对齐)
+// 子组件：卡牌显示
 // ==========================================
-const CardBack: React.FC<{ 
+export const CardBack: React.FC<{ 
   type: DeckType; 
   isReversed?: boolean; 
   name: string; 
@@ -49,7 +50,8 @@ const CardBack: React.FC<{
   theme?: ThemeMode;
   showDetailsOnHover?: boolean;
   zenMode?: boolean;
-}> = ({ type, isReversed, name, compact, color = 'default', onInfoClick, theme = 'dark', showDetailsOnHover, zenMode }) => {
+  forceStylized?: boolean; // 强制显示神秘风格而非图片
+}> = ({ type, isReversed, name, compact, color = 'default', onInfoClick, theme = 'dark', showDetailsOnHover, zenMode, forceStylized }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
   
@@ -68,7 +70,7 @@ const CardBack: React.FC<{
       onClick={onInfoClick}
       className={`relative transition-all duration-500 ease-in-out ${rotationClass} w-full aspect-[2/3] rounded-xl overflow-hidden shadow-2xl border ${theme === 'dark' ? 'border-white/10' : 'border-stone-300'} group bg-slate-900 cursor-pointer`}
     >
-      {imageUrl && !imgError ? (
+      {imageUrl && !imgError && !forceStylized ? (
         <img 
           src={imageUrl} 
           alt={name} 
@@ -89,14 +91,10 @@ const CardBack: React.FC<{
       )}
       
       {showDetailsOnHover && !zenMode && (
-        <div className="absolute inset-0 bg-slate-950/90 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3 pointer-events-none">
+        <div className="absolute inset-0 bg-slate-950/90 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3 pointer-events-none z-[60]">
           <div className="text-[10px] font-bold text-indigo-400 mb-1 border-b border-white/10 pb-1">{details?.zh}</div>
           <p className="text-[8px] leading-tight text-white/70 line-clamp-4 italic">{details?.meaning}</p>
         </div>
-      )}
-
-      {!compact && onInfoClick && (
-        <div className="absolute top-2 right-2 w-6 h-6 bg-black/40 hover:bg-indigo-600 rounded-full flex items-center justify-center text-[10px] text-white backdrop-blur-md transition-colors z-20">i</div>
       )}
     </div>
   );
@@ -145,6 +143,8 @@ const App: React.FC = () => {
   const [activeTarotTab, setActiveTarotTab] = useState<keyof typeof TAROT_CARDS>('major');
   const [activeInfoCard, setActiveInfoCard] = useState<{name: string, isReversed: boolean} | null>(null);
 
+  const [activePickerIdx, setActivePickerIdx] = useState<number | null>(null);
+
   const barChartRef = useRef<HTMLDivElement>(null);
   const lineChartRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -167,7 +167,8 @@ const App: React.FC = () => {
     readingDate: getLocalISOString(new Date()),
     actualOutcome: '',
     accuracyRating: 0,
-    layoutId: 't-1'
+    layoutId: 't-1',
+    cardsPerSide: 3
   });
 
   useEffect(() => {
@@ -206,15 +207,15 @@ const App: React.FC = () => {
   }, [state.entries]);
 
   useEffect(() => {
-    if (state.currentView !== 'home' || state.entries.length === 0) return;
-    const bar = echarts.init(barChartRef.current!);
+    if (state.currentView !== 'home' || state.entries.length === 0 || !barChartRef.current || !lineChartRef.current) return;
+    const bar = echarts.init(barChartRef.current);
     bar.setOption({
       xAxis: { type: 'category', data: dashboardStats.topCardNames, axisLabel: { color: isDark ? '#94a3b8' : '#64748b', fontSize: 10 } },
       yAxis: { type: 'value', splitLine: { lineStyle: { color: isDark ? '#1e293b' : '#f1f5f9' } } },
       series: [{ data: dashboardStats.topCardValues, type: 'bar', itemStyle: { color: '#6366f1', borderRadius: [4, 4, 0, 0] } }],
       grid: { top: 20, bottom: 40, left: 30, right: 10 }
     });
-    const line = echarts.init(lineChartRef.current!);
+    const line = echarts.init(lineChartRef.current);
     line.setOption({
       tooltip: {
         trigger: 'axis',
@@ -282,17 +283,62 @@ const App: React.FC = () => {
 
   const handleSaveEntry = () => {
     const d = new Date(formData.readingDate);
-    const newEntry: ReadingEntry = { id: formData.id || Date.now().toString(), date: d.toISOString(), deckType: formData.deckType, title: formData.title || "未命名记录", image: formData.image, notes: formData.notes, selectedCards: formData.selectedCards, lenormandColor: formData.lenormandColor, tag: formData.tag, font: formData.font, moonPhase: getMoonPhase(d), actualOutcome: formData.actualOutcome, accuracyRating: formData.accuracyRating, layoutId: formData.layoutId };
+    // 确保 selectedCards 数组长度符合布局要求，填充空位
+    const layout = SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId);
+    let finalCards = [...formData.selectedCards];
+    if (layout) {
+      const requiredCount = layout.type === 'configurable_comparison' ? formData.cardsPerSide * 2 : layout.positions.length;
+      while (finalCards.length < requiredCount) {
+        finalCards.push({ name: '', isReversed: false });
+      }
+    }
+
+    const newEntry: ReadingEntry = { 
+      id: formData.id || Date.now().toString(), 
+      date: d.toISOString(), 
+      deckType: formData.deckType, 
+      title: formData.title || "未命名记录", 
+      image: formData.image, 
+      notes: formData.notes, 
+      selectedCards: finalCards, 
+      lenormandColor: formData.lenormandColor, 
+      tag: formData.tag, 
+      font: formData.font, 
+      moonPhase: getMoonPhase(d), 
+      actualOutcome: formData.actualOutcome, 
+      accuracyRating: formData.accuracyRating, 
+      layoutId: formData.layoutId, 
+      cardsPerSide: formData.cardsPerSide 
+    };
+    
     let updated: ReadingEntry[];
     if (formData.id) updated = state.entries.map(e => e.id === formData.id ? newEntry : e);
     else updated = [newEntry, ...state.entries];
+    
     setState(prev => ({ ...prev, entries: updated, currentView: 'home' }));
     saveEntries(updated);
-    setFormData({ id: undefined, deckType: DeckType.TAROT, title: '', image: '', notes: '', selectedCards: [], lenormandColor: 'default', tag: undefined, font: 'font-serif', readingDate: getLocalISOString(new Date()), actualOutcome: '', accuracyRating: 0, layoutId: 't-1' });
+    
+    // 重置表单
+    setFormData({ id: undefined, deckType: DeckType.TAROT, title: '', image: '', notes: '', selectedCards: [], lenormandColor: 'default', tag: undefined, font: 'font-serif', readingDate: getLocalISOString(new Date()), actualOutcome: '', accuracyRating: 0, layoutId: 't-1', cardsPerSide: 3 });
   };
 
   const handleEditEntry = (entry: ReadingEntry) => {
-    setFormData({ id: entry.id, deckType: entry.deckType, title: entry.title || '', image: entry.image || '', notes: entry.notes || '', selectedCards: entry.selectedCards || [], lenormandColor: entry.lenormandColor || 'default', tag: entry.tag, font: entry.font || 'font-serif', readingDate: getLocalISOString(new Date(entry.date)), actualOutcome: entry.actualOutcome || '', accuracyRating: entry.accuracyRating || 0, layoutId: entry.layoutId || (entry.deckType === DeckType.TAROT ? 't-1' : 'l-3') });
+    setFormData({ 
+      id: entry.id, 
+      deckType: entry.deckType, 
+      title: entry.title || '', 
+      image: entry.image || '', 
+      notes: entry.notes || '', 
+      selectedCards: entry.selectedCards || [], 
+      lenormandColor: entry.lenormandColor || 'default', 
+      tag: entry.tag, 
+      font: entry.font || 'font-serif', 
+      readingDate: getLocalISOString(new Date(entry.date)), 
+      actualOutcome: entry.actualOutcome || '', 
+      accuracyRating: entry.accuracyRating || 0, 
+      layoutId: entry.layoutId || (entry.deckType === DeckType.TAROT ? 't-1' : 'l-3'), 
+      cardsPerSide: entry.cardsPerSide || 3 
+    });
     setState(prev => ({ ...prev, currentView: 'create' }));
   };
 
@@ -320,7 +366,16 @@ const App: React.FC = () => {
     const pool = isTarot ? Object.keys(TAROT_DETAILS) : Object.keys(LENORMAND_DETAILS);
     const layouts = SPREAD_LAYOUTS[formData.deckType];
     const currentLayout = layouts.find(l => l.id === formData.layoutId) || layouts[0];
-    const drawCount = count || currentLayout.positions.length;
+    
+    let drawCount = count;
+    if (!drawCount) {
+      if (currentLayout.type === 'configurable_comparison') {
+        drawCount = formData.cardsPerSide * 2;
+      } else {
+        drawCount = currentLayout.positions.length;
+      }
+    }
+
     const shuffled = [...pool].sort(() => 0.5 - Math.random());
     const drawn = shuffled.slice(0, drawCount).map(name => ({ name, isReversed: isTarot ? Math.random() > 0.5 : false }));
     setFormData(p => ({ ...p, selectedCards: drawn }));
@@ -411,13 +466,57 @@ const App: React.FC = () => {
     );
   };
 
-  // 渲染牌阵布局内容 (修复对齐、尺寸与交互)
-  const renderSpreadPreview = (layout: SpreadLayout, selectedCards: SelectedCard[], onAddCard: () => void, showLabels: boolean, isZen: boolean = false) => {
-    const isLenormand = layout.type === DeckType.LENORMAND;
+  const renderSpreadPreview = (layout: SpreadLayout, selectedCards: SelectedCard[], onSlotClick: (idx: number) => void, showLabels: boolean, isZen: boolean = false, cardsPerSide: number = 3) => {
+    const isLenormand = (layout.type === DeckType.LENORMAND) || (layout.id === 'two_paths_dynamic' && formData.deckType === DeckType.LENORMAND);
     const isGrandTableau = layout.id === 'l-gt';
+    const isComparison = layout.type === 'configurable_comparison';
     
-    // 动态调整卡牌尺寸以适应不同模式
     const cardSizeClass = isZen ? 'w-[25vw] sm:w-44 md:w-56' : 'w-16 sm:w-20 md:w-24';
+
+    if (isComparison) {
+      const groups = layout.groups || ['A', 'B'];
+      return (
+        <div className="w-full relative flex flex-col items-center">
+          <div className="grid grid-cols-2 w-full max-w-4xl relative min-h-[300px]">
+            <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 border-l border-dashed border-indigo-500/30 z-0"></div>
+            
+            {groups.map((group, gIdx) => (
+              <div key={gIdx} className="flex flex-col items-center px-4 z-10">
+                <h5 className="text-[10px] md:text-xs font-mystic opacity-40 mb-6 uppercase tracking-[0.2em]">{group}</h5>
+                <div className={`flex flex-wrap gap-4 justify-center w-full ${isLenormand ? 'flex-row' : 'flex-col sm:flex-row'}`}>
+                  {Array(cardsPerSide).fill(0).map((_, i) => {
+                    const idx = gIdx * cardsPerSide + i;
+                    const card = selectedCards[idx];
+                    return (
+                      <div key={idx} className="w-16 sm:w-20 md:w-24 flex flex-col items-center gap-1 group/item">
+                        <div className="w-full aspect-[2/3] relative shadow-xl rounded-xl transition-all hover:scale-105">
+                           {card && card.name ? (
+                              <CardBack 
+                                type={formData.deckType} 
+                                name={card.name} 
+                                isReversed={card.isReversed} 
+                                color={formData.lenormandColor} 
+                                theme={state.theme} 
+                                onInfoClick={() => setActiveInfoCard(card)}
+                                showDetailsOnHover={true}
+                              />
+                           ) : (
+                              <div onClick={() => onSlotClick(idx)} className="w-full h-full border-2 border-dashed border-white/10 bg-slate-900/40 rounded-xl flex items-center justify-center cursor-pointer hover:bg-slate-900/60 transition-colors">
+                                 <span className="text-[18px] opacity-10">+</span>
+                              </div>
+                           )}
+                        </div>
+                        {showLabels && <span className="text-[8px] opacity-30 font-bold uppercase tracking-tighter">POS {i + 1}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
 
     if (isLenormand && layout.grid) {
       return (
@@ -434,17 +533,18 @@ const App: React.FC = () => {
               return (
                 <div key={idx} className="relative flex flex-col items-center gap-2 group/item">
                   <div className="relative aspect-[2/3] w-full shadow-2xl rounded-xl transition-transform hover:scale-105">
-                    {card ? (
+                    {card && card.name ? (
                       <CardBack 
-                        type={layout.type} 
+                        type={DeckType.LENORMAND} 
                         name={card.name} 
                         isReversed={card.isReversed} 
                         color={formData.lenormandColor} 
                         theme={state.theme} 
                         onInfoClick={() => setActiveInfoCard(card)}
+                        showDetailsOnHover={true}
                       />
                     ) : (
-                      <div onClick={onAddCard} className="w-full h-full border-2 border-dashed border-white/10 bg-slate-900/40 rounded-xl flex items-center justify-center cursor-pointer hover:bg-slate-900/60 transition-colors">
+                      <div onClick={() => onSlotClick(idx)} className="w-full h-full border-2 border-dashed border-white/10 bg-slate-900/40 rounded-xl flex items-center justify-center cursor-pointer hover:bg-slate-900/60 transition-colors">
                         <span className="text-[12px] opacity-10">+</span>
                       </div>
                     )}
@@ -467,17 +567,18 @@ const App: React.FC = () => {
           return (
             <div key={idx} className={`${cardSizeClass} flex flex-col items-center gap-3 group/item`}>
               <div className="w-full aspect-[2/3] relative shadow-2xl rounded-xl transition-transform hover:scale-105">
-                 {card ? (
+                 {card && card.name ? (
                     <CardBack 
-                      type={layout.type} 
+                      type={formData.deckType} 
                       name={card.name} 
                       isReversed={card.isReversed} 
                       color={formData.lenormandColor} 
                       theme={state.theme} 
                       onInfoClick={() => setActiveInfoCard(card)}
+                      showDetailsOnHover={true}
                     />
                  ) : (
-                    <div onClick={onAddCard} className="w-full h-full border-2 border-dashed border-white/10 bg-slate-900/40 rounded-xl flex items-center justify-center cursor-pointer hover:bg-slate-900/60 transition-colors">
+                    <div onClick={() => onSlotClick(idx)} className="w-full h-full border-2 border-dashed border-white/10 bg-slate-900/40 rounded-xl flex items-center justify-center cursor-pointer hover:bg-slate-900/60 transition-colors">
                        <span className="text-[32px] opacity-10">+</span>
                     </div>
                  )}
@@ -501,7 +602,8 @@ const App: React.FC = () => {
         </div>
         <nav className="flex-1 space-y-4">
           <button onClick={() => setState(p => ({ ...p, currentView: 'home' }))} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${state.currentView === 'home' ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-indigo-500/10 opacity-70'}`}>🏠 仪表盘</button>
-          <button onClick={() => { setFormData({ id: undefined, deckType: DeckType.TAROT, title: '', image: '', notes: '', selectedCards: [], lenormandColor: 'default', tag: undefined, font: 'font-serif', readingDate: getLocalISOString(new Date()), actualOutcome: '', accuracyRating: 0, layoutId: 't-1' }); setState(p => ({ ...p, currentView: 'create' })); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${state.currentView === 'create' ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-indigo-500/10 opacity-70'}`}>🎴 抽牌记录</button>
+          <button onClick={() => { setFormData({ id: undefined, deckType: DeckType.TAROT, title: '', image: '', notes: '', selectedCards: [], lenormandColor: 'default', tag: undefined, font: 'font-serif', readingDate: getLocalISOString(new Date()), actualOutcome: '', accuracyRating: 0, layoutId: 't-1', cardsPerSide: 3 }); setState(p => ({ ...p, currentView: 'create' })); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${state.currentView === 'create' ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-indigo-500/10 opacity-70'}`}>🎴 抽牌记录</button>
+          <button onClick={() => setState(p => ({ ...p, currentView: 'archive' }))} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${state.currentView === 'archive' ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-indigo-500/10 opacity-70'}`}>📜 牌灵档案</button>
         </nav>
         <button onClick={toggleTheme} className="mt-auto flex items-center gap-3 px-4 py-3 rounded-xl border border-white/10 hover:bg-white/5 transition-all">{isDark ? '🌙 深邃模式' : '☀️ 纯净模式'}</button>
       </aside>
@@ -513,6 +615,10 @@ const App: React.FC = () => {
         </header>
 
         <div className="max-w-6xl mx-auto p-6 md:p-10 pb-32">
+          {state.currentView === 'archive' && (
+            <CardArchive entries={state.entries} theme={state.theme} />
+          )}
+
           {state.currentView === 'home' && (
             <div className="animate-in fade-in duration-700 space-y-10">
               <div className="flex flex-col md:flex-row justify-between items-stretch gap-6">
@@ -545,6 +651,40 @@ const App: React.FC = () => {
                 </div>
               </div>
 
+              {/* 快速入口区域 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div 
+                  onClick={() => setState(p => ({ ...p, currentView: 'archive' }))}
+                  className="relative p-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-indigo-900 to-purple-900 cursor-pointer group hover:scale-[1.02] transition-all shadow-2xl overflow-hidden"
+                >
+                  <div className="flex items-center gap-6 relative z-10">
+                    <div className="text-5xl group-hover:rotate-12 transition-transform duration-500">📚</div>
+                    <div>
+                      <h3 className="text-xl font-serif font-bold text-white">牌灵档案</h3>
+                      <p className="text-xs text-indigo-200/60 mt-1">探索 78 张塔罗与 36 张雷诺曼的奥秘</p>
+                    </div>
+                  </div>
+                  <div className="absolute top-4 right-6 text-4xl opacity-10 pointer-events-none group-hover:scale-125 transition-transform duration-700">🏛️</div>
+                </div>
+                
+                <div 
+                  onClick={() => {
+                    setFormData({ id: undefined, deckType: DeckType.TAROT, title: '', image: '', notes: '', selectedCards: [], lenormandColor: 'default', tag: undefined, font: 'font-serif', readingDate: getLocalISOString(new Date()), actualOutcome: '', accuracyRating: 0, layoutId: 't-1', cardsPerSide: 3 });
+                    setState(p => ({ ...p, currentView: 'create' }));
+                  }}
+                  className="relative p-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-blue-900 to-cyan-900 cursor-pointer group hover:scale-[1.02] transition-all shadow-2xl overflow-hidden"
+                >
+                  <div className="flex items-center gap-6 relative z-10">
+                    <div className="text-5xl group-hover:animate-pulse transition-all">✨</div>
+                    <div>
+                      <h3 className="text-xl font-serif font-bold text-white">启程抽牌</h3>
+                      <p className="text-xs text-blue-200/60 mt-1">记录当下的直觉与指引</p>
+                    </div>
+                  </div>
+                  <div className="absolute top-4 right-6 text-4xl opacity-10 pointer-events-none group-hover:scale-125 transition-transform duration-700">🪄</div>
+                </div>
+              </div>
+
               <div className="space-y-8">
                 <div className="flex flex-col lg:flex-row gap-4 items-center">
                   <div className="relative flex-1 w-full">
@@ -568,20 +708,18 @@ const App: React.FC = () => {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                    <h3 className="text-xl font-serif font-bold">历史星迹记录</h3>
                    <div className="flex gap-4">
-                      <MysticButton variant="secondary" onClick={() => { setIsSelectionMode(!isSelectionMode); setSelectedEntryIds(new Set()); }}>{isSelectionMode ? '取消选择' : '批量管理'}</MysticButton>
-                      {!isSelectionMode && <MysticButton onClick={() => { setFormData({ id: undefined, deckType: DeckType.TAROT, title: '', image: '', notes: '', selectedCards: [], lenormandColor: 'default', tag: undefined, font: 'font-serif', readingDate: getLocalISOString(new Date()), actualOutcome: '', accuracyRating: 0, layoutId: 't-1' }); setState(p => ({ ...p, currentView: 'create' })); }}>+ 启程抽牌</MysticButton>}
+                      <button onClick={() => setIsSelectionMode(!isSelectionMode)} className="px-6 py-2 rounded-full border border-indigo-500/20 text-[10px] font-bold uppercase text-indigo-400 hover:bg-indigo-500/10 transition-all">{isSelectionMode ? '取消选择' : '批量管理'}</button>
+                      {!isSelectionMode && <MysticButton onClick={() => { setFormData({ id: undefined, deckType: DeckType.TAROT, title: '', image: '', notes: '', selectedCards: [], lenormandColor: 'default', tag: undefined, font: 'font-serif', readingDate: getLocalISOString(new Date()), actualOutcome: '', accuracyRating: 0, layoutId: 't-1', cardsPerSide: 3 }); setState(p => ({ ...p, currentView: 'create' })); }}>+ 启程抽牌</MysticButton>}
                       {isSelectionMode && selectedEntryIds.size > 0 && <MysticButton variant="danger" onClick={handleBulkDelete}>删除选中 ({selectedEntryIds.size})</MysticButton>}
                    </div>
                 </div>
 
-                {/* 恢复：标签过滤器 */}
                 <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
                   {['全部', ...PRESET_TAGS].map(tag => (
                     <button key={tag} onClick={() => setActiveTagFilter(tag)} className={`px-5 py-2 rounded-full text-xs transition-all whitespace-nowrap border ${activeTagFilter === tag ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-900/40 border-white/5 opacity-40 hover:opacity-100'}`}>{tag}</button>
                   ))}
                 </div>
 
-                {/* 恢复：近期/归档切换 */}
                 <div className="flex border-b border-white/5 mb-6">
                   <button onClick={() => setHomeSubView('recent')} className={`px-8 py-4 text-xs uppercase tracking-widest font-mystic transition-all border-b-2 ${homeSubView === 'recent' ? 'text-indigo-400 border-indigo-500' : 'opacity-30 border-transparent hover:opacity-60'}`}>近期 (RECENT)</button>
                   <button onClick={() => setHomeSubView('archive')} className={`px-8 py-4 text-xs uppercase tracking-widest font-mystic transition-all border-b-2 ${homeSubView === 'archive' ? 'text-indigo-400 border-indigo-500' : 'opacity-30 border-transparent hover:opacity-60'}`}>归档 (ARCHIVE)</button>
@@ -606,7 +744,7 @@ const App: React.FC = () => {
           )}
 
           {state.currentView === 'create' && (
-            <div className={`max-w-3xl mx-auto p-10 rounded-[2.5rem] border shadow-2xl animate-in zoom-in-95 duration-500 ${isDark ? 'bg-slate-900/80 border-white/5 shadow-indigo-500/10' : 'bg-white border-slate-200'}`}>
+            <div className={`max-w-4xl mx-auto p-10 rounded-[2.5rem] border shadow-2xl animate-in zoom-in-95 duration-500 ${isDark ? 'bg-slate-900/80 border-white/5 shadow-indigo-500/10' : 'bg-white border-slate-200'}`}>
               <div className="mb-10 text-center">
                  <h2 className="text-3xl font-serif font-bold mb-2">{formData.id ? '复盘记录' : '捕捉启示'}</h2>
                  <p className="text-xs opacity-50 uppercase tracking-[0.3em] font-mystic">{formData.id ? 'Review & Reflect' : 'Intuition Recording'}</p>
@@ -622,17 +760,44 @@ const App: React.FC = () => {
                   <label className="text-[10px] uppercase opacity-40 font-bold tracking-widest block px-2">牌阵布局 (Spread Layout)</label>
                   <div className="flex flex-wrap gap-2">
                     {SPREAD_LAYOUTS[formData.deckType].map(layout => (
-                      <button key={layout.id} onClick={() => setFormData(p => ({ ...p, layoutId: layout.id, selectedCards: [] }))} className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase transition-all border ${formData.layoutId === layout.id ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-950/20 border-white/5 opacity-60 hover:opacity-100'}`}>{layout.name}</button>
+                      <button key={layout.id} onClick={() => setFormData(p => ({ ...p, layoutId: layout.id, selectedCards: [] }))} className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase transition-all border ${formData.layoutId === layout.id ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg' : 'bg-slate-950/20 border-white/5 opacity-60 hover:opacity-100'}`}>{layout.name}</button>
                     ))}
                   </div>
                 </div>
+
+                {formData.deckType === DeckType.LENORMAND && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                    <label className="text-[10px] uppercase opacity-40 font-bold tracking-widest block px-2">环境色调 (Theme Color)</label>
+                    <div className="flex flex-wrap gap-2">
+                      {(Object.keys(LENORMAND_THEME_CONFIG) as LenormandColor[]).map(color => (
+                        <button 
+                          key={color} 
+                          onClick={() => setFormData(p => ({ ...p, lenormandColor: color }))} 
+                          className={`px-4 py-2 rounded-xl text-[10px] font-bold border transition-all ${formData.lenormandColor === color ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-950/20 border-white/5 opacity-60 hover:opacity-100'}`}
+                        >
+                          {LENORMAND_THEME_CONFIG[color].emoji} {LENORMAND_THEME_CONFIG[color].label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId)?.type === 'configurable_comparison' && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                    <label className="text-[10px] uppercase opacity-40 font-bold tracking-widest block px-2">对比数量 (Cards Per Side)</label>
+                    <div className="flex gap-2">
+                      {[3, 5].map(opt => (
+                        <button key={opt} onClick={() => setFormData(p => ({ ...p, cardsPerSide: opt, selectedCards: [] }))} className={`px-5 py-2 rounded-xl text-xs font-bold border transition-all ${formData.cardsPerSide === opt ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-950/20 border-white/5 opacity-60'}`}>{opt} 张 / 侧</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <label className="text-[10px] uppercase opacity-40 font-bold tracking-widest block px-2">启示时刻 (Time)</label>
                   <input type="datetime-local" value={formData.readingDate} onChange={e => setFormData(p => ({ ...p, readingDate: e.target.value }))} className={`w-full p-4 rounded-2xl border transition-all ${isDark ? 'bg-slate-950 border-white/5 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
                 </div>
 
-                {/* 分类标签选择 */}
                 <div className="space-y-4">
                   <label className="text-[10px] uppercase opacity-40 font-bold tracking-widest block px-2">分类标签 (Tags)</label>
                   <div className="flex flex-wrap gap-2">
@@ -647,29 +812,34 @@ const App: React.FC = () => {
                   <input type="text" value={formData.title} onChange={e => setFormData(p => ({ ...p, title: e.target.value }))} placeholder="为这段灵感命名..." className={`w-full p-4 rounded-2xl border transition-all ${isDark ? 'bg-slate-950 border-white/5 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
                 </div>
 
-                <div className="flex justify-between items-center px-2">
-                   <span className="text-[10px] uppercase opacity-40 font-bold tracking-widest block">牌阵预览 (Spread)</span>
-                   <div className="flex gap-2">
-                     <button onClick={() => setShowSpreadLabels(!showSpreadLabels)} className={`text-[9px] uppercase font-mystic px-3 py-1 rounded-full transition-all border ${showSpreadLabels ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-indigo-600/10 text-indigo-400 border-indigo-500/20'}`}>{showSpreadLabels ? '隐藏标签' : '显示标签'}</button>
-                     <button onClick={() => handleRandomDraw()} className="text-[9px] uppercase font-mystic bg-indigo-600/20 hover:bg-indigo-600/40 px-3 py-1 rounded-full transition-all border border-indigo-500/20">✨ 虚拟抽牌</button>
-                   </div>
-                </div>
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center px-2">
+                    <span className="text-[10px] uppercase opacity-40 font-bold tracking-widest block">牌阵预览 (Spread)</span>
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowSpreadLabels(!showSpreadLabels)} className={`text-[9px] uppercase font-mystic px-3 py-1 rounded-full transition-all border ${showSpreadLabels ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-indigo-600/10 text-indigo-400 border-indigo-500/20'}`}>{showSpreadLabels ? '隐藏标签' : '显示标签'}</button>
+                      <button onClick={() => handleRandomDraw()} className="text-[9px] uppercase font-mystic bg-indigo-600/20 hover:bg-indigo-600/40 px-3 py-1 rounded-full transition-all border border-indigo-500/20">✨ 虚拟抽牌</button>
+                    </div>
+                  </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                   <div onClick={() => document.getElementById('cam')?.click()} className="aspect-square border-2 border-dashed border-white/10 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-all overflow-hidden relative">
-                      {formData.image ? <img src={formData.image} className="w-full h-full object-cover" /> : <><span className="text-4xl mb-3 opacity-20">📷</span><p className="text-[10px] uppercase opacity-40 font-bold tracking-widest">上传实拍</p></>}
-                      <input id="cam" type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if(f){ const r = new FileReader(); r.onloadend = () => setFormData(p => ({ ...p, image: r.result as string })); r.readAsDataURL(f); } }} />
-                   </div>
-                   <div className="aspect-square border border-white/5 rounded-3xl flex flex-col items-center justify-center p-6 bg-slate-950/20 overflow-hidden relative shadow-inner">
-                      {formData.selectedCards.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div onClick={() => document.getElementById('cam')?.click()} className="md:col-span-1 aspect-square border-2 border-dashed border-white/10 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-all overflow-hidden relative shadow-lg">
+                        {formData.image ? <img src={formData.image} className="w-full h-full object-cover" /> : <><span className="text-4xl mb-3 opacity-20">📷</span><p className="text-[10px] uppercase opacity-40 font-bold tracking-widest">上传实拍</p></>}
+                        <input id="cam" type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if(f){ const r = new FileReader(); r.onloadend = () => setFormData(p => ({ ...p, image: r.result as string })); r.readAsDataURL(f); } }} />
+                    </div>
+                    <div className="md:col-span-2 min-h-[400px] border border-white/5 rounded-3xl flex flex-col items-center justify-center p-8 bg-slate-950/20 overflow-hidden relative shadow-inner">
                         <div className="w-full h-full flex items-center justify-center overflow-hidden">
-                          {renderSpreadPreview(SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId) || SPREAD_LAYOUTS[formData.deckType][0], formData.selectedCards, () => setShowPicker(true), showSpreadLabels)}
+                          {renderSpreadPreview(
+                            SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId) || SPREAD_LAYOUTS[formData.deckType][0], 
+                            formData.selectedCards, 
+                            (idx) => { setActivePickerIdx(idx); setShowPicker(true); }, 
+                            showSpreadLabels, 
+                            false, 
+                            formData.cardsPerSide
+                          )}
                         </div>
-                      ) : (
-                        <div onClick={() => setShowPicker(true)} className="text-center opacity-40 cursor-pointer w-full h-full flex flex-col items-center justify-center"><p className="text-2xl mb-2">🎴</p><p className="text-[10px] uppercase font-bold tracking-widest">手动标记</p></div>
-                      )}
-                      {formData.selectedCards.length > 0 && <button onClick={() => setShowPicker(true)} className="absolute bottom-2 right-2 bg-black/40 text-[10px] px-2 py-1 rounded-md opacity-40 hover:opacity-100 z-10">重选</button>}
-                   </div>
+                        {formData.selectedCards.some(c => c && c.name) && <button onClick={() => { setFormData(p => ({...p, selectedCards: []})); }} className="absolute bottom-2 right-2 bg-black/40 text-[10px] px-2 py-1 rounded-md opacity-40 hover:opacity-100 z-10">重置牌面</button>}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -688,7 +858,7 @@ const App: React.FC = () => {
                 )}
 
                 <div className="flex gap-4 pt-6">
-                   <MysticButton variant="secondary" className="flex-1 py-4" onClick={() => setState(p => ({ ...p, currentView: 'home' }))}>取消</MysticButton>
+                   <button onClick={() => setState(p => ({ ...p, currentView: 'home' }))} className="flex-1 py-4 rounded-full border border-white/10 opacity-60 hover:opacity-100 transition-all text-xs font-bold uppercase tracking-widest">取消</button>
                    <MysticButton className="flex-1 py-4 shadow-indigo-500/40" onClick={handleSaveEntry}>保存记录</MysticButton>
                 </div>
               </div>
@@ -716,9 +886,15 @@ const App: React.FC = () => {
                   </div>
                   {selectedEntry.image && <div className="mb-12 max-w-2xl mx-auto rounded-[2.5rem] overflow-hidden border border-white/5 shadow-2xl"><img src={selectedEntry.image} className="w-full" /></div>}
                   
-                  {/* 牌阵展示区：支持点击 */}
                   <div className="mb-14 w-full flex justify-center">
-                    {renderSpreadPreview(SPREAD_LAYOUTS[selectedEntry.deckType].find(l => l.id === selectedEntry.layoutId) || SPREAD_LAYOUTS[selectedEntry.deckType][0], selectedEntry.selectedCards || [], () => {}, showSpreadLabels)}
+                    {renderSpreadPreview(
+                      SPREAD_LAYOUTS[selectedEntry.deckType].find(l => l.id === selectedEntry.layoutId) || SPREAD_LAYOUTS[selectedEntry.deckType][0], 
+                      selectedEntry.selectedCards || [], 
+                      () => {}, 
+                      showSpreadLabels, 
+                      false, 
+                      selectedEntry.cardsPerSide
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -730,7 +906,6 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* 专注模式：宏大布局适配 */}
         {isZenMode && selectedEntry && (
           <div className={`fixed inset-0 z-[400] flex flex-col items-center justify-center p-6 sm:p-12 md:p-20 animate-in fade-in duration-500 ${isDark ? 'bg-slate-950' : 'bg-slate-100'} no-print overflow-hidden`}>
             <div className="absolute top-8 right-8 flex gap-4 z-[410]">
@@ -740,7 +915,14 @@ const App: React.FC = () => {
             <div className="w-full max-w-7xl h-full flex flex-col justify-center items-center overflow-y-auto py-24 no-scrollbar">
               <h2 className="text-4xl sm:text-6xl font-bold font-serif mb-16 sm:mb-24 text-center tracking-[0.2em]">{selectedEntry.title || "星迹记录"}</h2>
               <div className="w-full flex justify-center items-center">
-                {renderSpreadPreview(SPREAD_LAYOUTS[selectedEntry.deckType].find(l => l.id === selectedEntry.layoutId) || SPREAD_LAYOUTS[selectedEntry.deckType][0], selectedEntry.selectedCards || [], () => {}, showSpreadLabels, true)}
+                {renderSpreadPreview(
+                  SPREAD_LAYOUTS[selectedEntry.deckType].find(l => l.id === selectedEntry.layoutId) || SPREAD_LAYOUTS[selectedEntry.deckType][0], 
+                  selectedEntry.selectedCards || [], 
+                  () => {}, 
+                  showSpreadLabels, 
+                  true, 
+                  selectedEntry.cardsPerSide
+                )}
               </div>
               <p className="text-[12px] opacity-10 uppercase tracking-[0.8em] animate-pulse mt-16 sm:mt-32">点击卡牌查看寓意 • 仪式神圣</p>
             </div>
@@ -748,26 +930,59 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* 选牌浮层 */}
+      {/* 选牌浮层 (Picker) */}
       {showPicker && (
         <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 no-print">
-          <div className="absolute inset-0 bg-black/95 backdrop-blur-xl animate-in fade-in duration-300" onClick={() => setShowPicker(false)}></div>
+          <div className="absolute inset-0 bg-black/95 backdrop-blur-xl animate-in fade-in duration-300" onClick={() => { setShowPicker(false); setActivePickerIdx(null); }}></div>
           <div className={`relative w-full max-w-5xl h-[85vh] rounded-[2.5rem] border shadow-2xl flex flex-col overflow-hidden ${isDark ? 'bg-slate-900 border-white/5' : 'bg-white border-slate-200'}`}>
-             <div className="p-8 border-b border-white/5 flex justify-between items-center bg-black/10"><h3 className="text-xl font-mystic text-indigo-400">选择卡牌 🎴</h3><button onClick={() => setShowPicker(false)} className="text-3xl opacity-30 hover:opacity-100">✕</button></div>
+             <div className="p-8 border-b border-white/5 flex justify-between items-center bg-black/10"><h3 className="text-xl font-mystic text-indigo-400">选择卡牌 🎴</h3><button onClick={() => { setShowPicker(false); setActivePickerIdx(null); }} className="text-3xl opacity-30 hover:opacity-100">✕</button></div>
              {formData.deckType === DeckType.TAROT && <div className="flex overflow-x-auto no-scrollbar border-b border-white/5 bg-black/20">{Object.keys(TAROT_CARDS).map((tab) => <button key={tab} onClick={() => setActiveTarotTab(tab as any)} className={`flex-shrink-0 px-6 md:px-8 py-4 text-[10px] font-bold uppercase transition-all whitespace-nowrap ${activeTarotTab === tab ? 'text-indigo-400 border-indigo-500' : 'opacity-20 hover:opacity-60'}`}>{tab === 'major' ? '大阿卡纳' : tab === 'wands' ? '权杖' : tab === 'cups' ? '圣杯' : tab === 'swords' ? '宝剑' : '星币'}</button>)}</div>}
              <div className="flex-1 overflow-y-auto p-6 md:p-12 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-8 custom-scrollbar">
                 {(formData.deckType === DeckType.TAROT ? TAROT_CARDS[activeTarotTab] : LENORMAND_CARDS).map(name => {
-                  const sel = formData.selectedCards.find(c => c.name === name);
+                  const currentIdx = activePickerIdx !== null ? activePickerIdx : formData.selectedCards.length;
+                  const sel = formData.selectedCards[currentIdx];
+                  const isSelectedHere = sel?.name === name;
+                  
                   return (
-                    <div key={name} onClick={() => sel ? setFormData(p => ({ ...p, selectedCards: p.selectedCards.filter(c => c.name !== name) })) : setFormData(p => ({ ...p, selectedCards: [...p.selectedCards, { name, isReversed: false }] }))} className={`relative cursor-pointer transition-all ${sel ? 'scale-105 z-10' : 'opacity-50 hover:opacity-100'}`}>
-                       <CardBack type={formData.deckType} name={name} isReversed={sel?.isReversed} color={formData.lenormandColor} theme={state.theme} showDetailsOnHover={true} />
-                       {sel && <div className="absolute inset-0 border-4 border-indigo-500 rounded-xl pointer-events-none z-20"></div>}
-                       {sel && formData.deckType === DeckType.TAROT && <button onClick={e => { e.stopPropagation(); setFormData(p => ({ ...p, selectedCards: p.selectedCards.map(c => c.name === name ? {...c, isReversed: !c.isReversed} : c) })) }} className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-[8px] px-3 py-1 rounded-full font-bold z-30">{sel.isReversed ? '逆' : '正'}</button>}
+                    <div key={name} className="relative">
+                      <div onClick={() => {
+                        const newSelected = [...formData.selectedCards];
+                        const prevReversed = sel?.name === name ? sel.isReversed : false;
+                        newSelected[currentIdx] = { name, isReversed: prevReversed };
+                        setFormData(p => ({ ...p, selectedCards: newSelected }));
+                        
+                        // 雷诺曼选完即关，塔罗需要确认正逆位
+                        if (activePickerIdx !== null && formData.deckType === DeckType.LENORMAND) {
+                          setShowPicker(false);
+                          setActivePickerIdx(null);
+                        }
+                      }} className={`relative cursor-pointer transition-all ${isSelectedHere ? 'scale-105 z-10' : 'opacity-50 hover:opacity-100'}`}>
+                        <CardBack type={formData.deckType} name={name} compact color={formData.lenormandColor} theme={state.theme} showDetailsOnHover={true} />
+                        {isSelectedHere && <div className="absolute inset-0 border-4 border-indigo-500 rounded-xl pointer-events-none z-20 shadow-[0_0_15px_rgba(99,102,241,0.5)]"></div>}
+                      </div>
+                      
+                      {isSelectedHere && formData.deckType === DeckType.TAROT && (
+                        <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 z-[70] flex gap-1">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const newSelected = [...formData.selectedCards];
+                              newSelected[currentIdx] = { ...newSelected[currentIdx], isReversed: !newSelected[currentIdx].isReversed };
+                              setFormData(p => ({ ...p, selectedCards: newSelected }));
+                            }}
+                            className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase transition-all shadow-lg border border-white/10 ${sel.isReversed ? 'bg-amber-600 text-white' : 'bg-indigo-600 text-white'}`}
+                          >
+                            {sel.isReversed ? '逆位' : '正位'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
              </div>
-             <div className="p-8 border-t border-white/5 flex justify-end bg-black/10"><MysticButton onClick={() => setShowPicker(false)}>确定 ({formData.selectedCards.length})</MysticButton></div>
+             <div className="p-8 border-t border-white/5 flex justify-end bg-black/10">
+               <MysticButton onClick={() => { setShowPicker(false); setActivePickerIdx(null); }}>完成选择</MysticButton>
+             </div>
           </div>
         </div>
       )}

@@ -27,11 +27,12 @@ export interface ReadingEntry {
   actualOutcome?: string; // 实际结果
   accuracyRating?: number; // 准确度评分 (1-5)
   layoutId?: string; // 牌阵布局 ID
+  cardsPerSide?: number; // 动态对比牌阵每侧数量
 }
 
 export interface AppState {
   entries: ReadingEntry[];
-  currentView: 'home' | 'create' | 'detail';
+  currentView: 'home' | 'create' | 'detail' | 'archive';
   selectedEntryId?: string;
   theme: ThemeMode;
 }
