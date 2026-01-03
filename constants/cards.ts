@@ -1,3 +1,27 @@
+import { DeckType } from "../types";
+
+export interface SpreadLayout {
+  id: string;
+  name: string;
+  type: DeckType;
+  positions: { label: string }[];
+  grid?: { rows: number; cols: number };
+}
+
+export const SPREAD_LAYOUTS: Record<string, SpreadLayout[]> = {
+  [DeckType.TAROT]: [
+    { id: 't-1', name: '单张牌', type: DeckType.TAROT, positions: [{ label: '启示' }] },
+    { id: 't-3', name: '三张牌', type: DeckType.TAROT, positions: [{ label: '过去' }, { label: '现在' }, { label: '未来' }] },
+    { id: 't-5', name: '五张牌', type: DeckType.TAROT, positions: [{ label: '现状' }, { label: '挑战' }, { label: '潜意识' }, { label: '目标' }, { label: '近未来' }] },
+    { id: 't-cc', name: '凯尔特十字', type: DeckType.TAROT, positions: Array(10).fill(0).map((_, i) => ({ label: `位置 ${i + 1}` })) },
+  ],
+  [DeckType.LENORMAND]: [
+    { id: 'l-3', name: '3张线性', type: DeckType.LENORMAND, positions: Array(3).fill(0).map((_, i) => ({ label: `${i + 1}` })), grid: { rows: 1, cols: 3 } },
+    { id: 'l-5', name: '5张线性', type: DeckType.LENORMAND, positions: Array(5).fill(0).map((_, i) => ({ label: `${i + 1}` })), grid: { rows: 1, cols: 5 } },
+    { id: 'l-9', name: '9宫格', type: DeckType.LENORMAND, positions: Array(9).fill(0).map((_, i) => ({ label: `${i + 1}` })), grid: { rows: 3, cols: 3 } },
+    { id: 'l-gt', name: 'Grand Tableau', type: DeckType.LENORMAND, positions: Array(36).fill(0).map((_, i) => ({ label: `${i + 1}` })), grid: { rows: 5, cols: 8 } },
+  ]
+};
 
 export interface CardDetail {
   zh: string;
@@ -55,7 +79,7 @@ export const TAROT_DETAILS: Record<string, CardDetail> = {
   "8 力量 (Strength)": { 
     zh: "力量", en: "The Strength", 
     imageUrl: `${WIKIMEDIA_BASE}/f/f5/RWS_Tarot_08_Strength.jpg`,
-    meaning: "内在力量、勇气、同情、控制冲动。", reversedMeaning: "自我怀疑、软弱、缺乏克制、沮丧。" 
+    meaning: "内在力量、勇、同情、控制冲动。", reversedMeaning: "自我怀疑、软弱、缺乏克制、沮丧。" 
   },
   "9 隐士 (The Hermit)": { 
     zh: "隐士", en: "The Hermit", 

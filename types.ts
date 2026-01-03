@@ -1,4 +1,3 @@
-
 export enum DeckType {
   TAROT = 'TAROT',
   LENORMAND = 'LENORMAND'
@@ -25,6 +24,9 @@ export interface ReadingEntry {
   moonPhase?: { name: string; emoji: string };
   selectedCards?: SelectedCard[];
   lenormandColor?: LenormandColor;
+  actualOutcome?: string; // 实际结果
+  accuracyRating?: number; // 准确度评分 (1-5)
+  layoutId?: string; // 牌阵布局 ID
 }
 
 export interface AppState {
