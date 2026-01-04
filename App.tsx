@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { DeckType, ReadingEntry, AppState, SelectedCard, ThemeMode, LenormandColor } from './types';
 import { loadEntries, saveEntries } from './services/storage';
 import { MysticButton } from './components/MysticButton';
@@ -134,8 +134,18 @@ const App: React.FC = () => {
   const [activeTagFilter, setActiveTagFilter] = useState<string>('全部');
   const [homeSubView, setHomeSubView] = useState<'recent' | 'archive'>('recent');
   
+  // 精确日期筛选状态 (YYYY-MM-DD)
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>('');
+
   // 归档折叠状态
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+
+  // 侧边栏折叠状态 (桌面端)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // 修复：记录离开主页视图时的滚动高度
+  const scrollPosRef = useRef<number>(0);
+  const prevViewRef = useRef<string>('home');
 
   const [isZenMode, setIsZenMode] = useState(false);
   const [showSpreadLabels, setShowSpreadLabels] = useState(false);
@@ -159,6 +169,20 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('user_custom_tags_ordered', JSON.stringify(allTags));
   }, [allTags]);
+
+  // 修复滚动高度的逻辑
+  useLayoutEffect(() => {
+    // 如果是从详情页或者其他页返回主页
+    if (state.currentView === 'home' && (prevViewRef.current === 'detail' || prevViewRef.current === 'create' || prevViewRef.current === 'archive')) {
+      // 需要稍作延迟确保 DOM 已经完全挂载并渲染
+      const timer = setTimeout(() => {
+        window.scrollTo(0, scrollPosRef.current);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+    // 记录当前视图供下一次切换时参考
+    prevViewRef.current = state.currentView;
+  }, [state.currentView]);
 
   const handleAddCustomTag = () => {
     const trimmed = newTagInput.trim();
@@ -349,20 +373,26 @@ const App: React.FC = () => {
   const filteredEntries = useMemo(() => {
     const query = searchQuery.toLowerCase();
     return state.entries.filter(e => {
+      // 搜索词匹配
       const matchesSearch = e.notes.toLowerCase().includes(query) || (e.title && e.title.toLowerCase().includes(query)) || (e.tag && e.tag.includes(query)) || e.selectedCards?.some(c => c.name.toLowerCase().includes(query));
+      // 类型匹配
       const matchesType = typeFilter === 'ALL' || e.deckType === typeFilter;
+      // 标签匹配
       const matchesTag = activeTagFilter === '全部' || e.tag === activeTagFilter;
-      return matchesSearch && matchesType && matchesTag;
+      // 日期精确匹配 (YYYY-MM-DD)
+      const dateStr = new Date(e.date).toLocaleDateString('en-CA'); // 使用 en-CA 获得 YYYY-MM-DD
+      const matchesDate = !selectedDateFilter || dateStr === selectedDateFilter;
+      
+      return matchesSearch && matchesType && matchesTag && matchesDate;
     });
-  }, [state.entries, searchQuery, typeFilter, activeTagFilter]);
+  }, [state.entries, searchQuery, typeFilter, activeTagFilter, selectedDateFilter]);
 
   const displayData = useMemo(() => {
-    if (homeSubView === 'recent') {
+    if (homeSubView === 'recent' && !selectedDateFilter) {
       const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
       return filteredEntries.filter(e => new Date(e.date).getTime() > sevenDaysAgo);
     } else {
       const groups: Record<string, ReadingEntry[]> = {};
-      // 归档按照日期倒序排列
       const sorted = [...filteredEntries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       sorted.forEach(e => {
         const date = new Date(e.date);
@@ -372,7 +402,7 @@ const App: React.FC = () => {
       });
       return groups;
     }
-  }, [filteredEntries, homeSubView]);
+  }, [filteredEntries, homeSubView, selectedDateFilter]);
 
   const toggleMonthExpansion = (month: string) => {
     setExpandedMonths(prev => {
@@ -423,6 +453,8 @@ const App: React.FC = () => {
   };
 
   const handleEditEntry = (entry: ReadingEntry) => {
+    // 离开列表前记录位置
+    scrollPosRef.current = window.scrollY;
     setFormData({ 
       id: entry.id, 
       deckType: entry.deckType, 
@@ -549,7 +581,15 @@ ${entry.notes || '无文字记录'}`;
     return (
       <div 
         key={entry.id} 
-        onClick={() => isSelectionMode ? setSelectedEntryIds(prev => { const next = new Set(prev); if(next.has(entry.id)) next.delete(entry.id); else next.add(entry.id); return next; }) : setState(p => ({ ...p, currentView: 'detail', selectedEntryId: entry.id }))} 
+        onClick={() => {
+          if (isSelectionMode) {
+            setSelectedEntryIds(prev => { const next = new Set(prev); if(next.has(entry.id)) next.delete(entry.id); else next.add(entry.id); return next; });
+          } else {
+            // 修复：记录进入详情页前的滚动位置
+            scrollPosRef.current = window.scrollY;
+            setState(p => ({ ...p, currentView: 'detail', selectedEntryId: entry.id }));
+          }
+        }} 
         className={`relative rounded-2xl border overflow-hidden cursor-pointer hover:shadow-2xl transition-all duration-500 group ${isDark ? 'bg-slate-900/30 border-white/5' : 'bg-white border-slate-100 shadow-sm'} ${isSelectionMode && isSelected ? 'ring-4 ring-indigo-500 ring-offset-4 ring-offset-slate-950' : ''}`}
       >
         {isSelectionMode && (
@@ -748,28 +788,85 @@ ${entry.notes || '无文字记录'}`;
     );
   };
 
+  const navItems = [
+    { id: 'home', label: '仪表盘', icon: '🏠', action: () => {
+      if (state.currentView !== 'home') {
+        setState(p => ({ ...p, currentView: 'home' }));
+      }
+    } },
+    { id: 'create', label: '抽牌记录', icon: '🎴', action: () => { 
+      scrollPosRef.current = window.scrollY;
+      resetFormData(DeckType.TAROT); 
+      setState(p => ({ ...p, currentView: 'create' })); 
+    } },
+    { id: 'archive', label: '牌灵档案', icon: '📜', action: () => {
+      scrollPosRef.current = window.scrollY;
+      setState(p => ({ ...p, currentView: 'archive' }));
+    } },
+  ];
+
   return (
     <div className={`flex min-h-screen ${isDark ? 'bg-slate-950 text-slate-200' : 'bg-slate-50 text-slate-900'} transition-colors duration-500`}>
-      <aside className={`hidden md:flex flex-col w-64 border-r sticky top-0 h-screen ${isDark ? 'bg-slate-900 border-white/5' : 'bg-white border-slate-200'} p-6 no-print`}>
-        <div className="mb-10 text-center">
-          <h1 onClick={() => setState(p => ({ ...p, currentView: 'home' }))} className="text-2xl font-mystic tracking-tighter text-indigo-500 uppercase cursor-pointer hover:opacity-80 transition-opacity">Mystic Journal</h1>
-          <p className="text-[10px] opacity-40 uppercase tracking-widest mt-1">Archive of Symbols & Whispers</p>
+      {/* 桌面端侧边栏 (Sidebar) */}
+      <aside className={`hidden md:flex flex-col fixed left-0 top-0 h-screen transition-all duration-300 border-r z-[200] no-print ${isSidebarCollapsed ? 'w-20' : 'w-64'} ${isDark ? 'bg-slate-900 border-white/5' : 'bg-white border-slate-200'} p-4`}>
+        <div className="mb-8 flex items-center justify-between overflow-hidden">
+          {!isSidebarCollapsed && (
+            <div className="animate-in fade-in duration-300">
+              <h1 className="text-xl font-mystic tracking-tighter text-indigo-500 uppercase">Mystic Journal</h1>
+            </div>
+          )}
+          <button 
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="p-2 rounded-lg hover:bg-white/5 transition-colors text-xl ml-auto"
+          >
+            {isSidebarCollapsed ? '➡️' : '⬅️'}
+          </button>
         </div>
-        <nav className="flex-1 space-y-4">
-          <button onClick={() => setState(p => ({ ...p, currentView: 'home' }))} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${state.currentView === 'home' ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-indigo-500/10 opacity-70'}`}>🏠 仪表盘</button>
-          <button onClick={() => { resetFormData(DeckType.TAROT); setState(p => ({ ...p, currentView: 'create' })); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${state.currentView === 'create' ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-indigo-500/10 opacity-70'}`}>🎴 抽牌记录</button>
-          <button onClick={() => setState(p => ({ ...p, currentView: 'archive' }))} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${state.currentView === 'archive' ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-indigo-500/10 opacity-70'}`}>📜 牌灵档案</button>
+        
+        <nav className="flex-1 space-y-2 overflow-hidden">
+          {navItems.map(item => (
+            <button 
+              key={item.id}
+              onClick={item.action} 
+              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all whitespace-nowrap ${state.currentView === item.id ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-indigo-500/10 opacity-70'}`}
+            >
+              <span className="text-xl">{item.icon}</span>
+              {!isSidebarCollapsed && <span className="font-bold text-sm">{item.label}</span>}
+            </button>
+          ))}
         </nav>
-        <button onClick={toggleTheme} className="mt-auto flex items-center gap-3 px-4 py-3 rounded-xl border border-white/10 hover:bg-white/5 transition-all">{isDark ? '🌙 深邃模式' : '☀️ 纯净模式'}</button>
+
+        <button 
+          onClick={toggleTheme} 
+          className="mt-auto flex items-center gap-4 px-4 py-3 rounded-xl border border-white/10 hover:bg-white/5 transition-all whitespace-nowrap overflow-hidden"
+        >
+          <span className="text-xl">{isDark ? '🌙' : '☀️'}</span>
+          {!isSidebarCollapsed && <span className="text-xs font-bold">{isDark ? '深邃模式' : '纯净模式'}</span>}
+        </button>
       </aside>
 
-      <main className="flex-1 overflow-x-hidden">
+      {/* 移动端底部导航 (Bottom Nav) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 border-t bg-slate-900/90 backdrop-blur-lg z-[500] flex justify-around items-center no-print border-white/5">
+        {navItems.map(item => (
+          <button 
+            key={item.id}
+            onClick={item.action}
+            className={`flex flex-col items-center gap-1 transition-all ${state.currentView === item.id ? 'text-indigo-400 scale-110' : 'opacity-40'}`}
+          >
+            <span className="text-2xl">{item.icon}</span>
+            <span className="text-[10px] font-bold uppercase">{item.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {/* 主内容区域 */}
+      <main className={`flex-1 overflow-x-hidden transition-all duration-300 pb-24 md:pb-0 ${isSidebarCollapsed ? 'md:ml-20' : 'md:ml-64'}`}>
         <header className="md:hidden flex items-center justify-between p-6 border-b border-white/5 bg-slate-900/50 backdrop-blur-md sticky top-0 z-[100] no-print">
            <h1 onClick={() => setState(p => ({ ...p, currentView: 'home' }))} className="text-xl font-mystic text-indigo-500 uppercase cursor-pointer">Mystic Journal</h1>
            <button onClick={toggleTheme}>{isDark ? '🌙' : '☀️'}</button>
         </header>
 
-        <div className="max-w-6xl mx-auto p-6 md:p-10 pb-32">
+        <div className="max-w-6xl mx-auto p-6 md:p-10">
           {state.currentView === 'archive' && (
             <CardArchive entries={state.entries} theme={state.theme} lenormandColor={lenormandTheme} onColorChange={updateGlobalLenormandTheme} />
           )}
@@ -819,12 +916,11 @@ ${entry.notes || '无文字记录'}`;
                 </div>
               </div>
 
-              {/* 快速入口区域 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div 
-                  onClick={() => setState(p => ({ ...p, currentView: 'archive' }))}
-                  className="relative p-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-indigo-900 to-purple-900 cursor-pointer group hover:scale-[1.02] transition-all shadow-2xl overflow-hidden"
-                >
+                <div onClick={() => {
+                  scrollPosRef.current = window.scrollY;
+                  setState(p => ({ ...p, currentView: 'archive' }));
+                }} className="relative p-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-indigo-900 to-purple-900 cursor-pointer group hover:scale-[1.02] transition-all shadow-2xl overflow-hidden">
                   <div className="flex items-center gap-6 relative z-10">
                     <div className="text-5xl group-hover:rotate-12 transition-transform duration-500">📚</div>
                     <div>
@@ -835,13 +931,11 @@ ${entry.notes || '无文字记录'}`;
                   <div className="absolute top-4 right-6 text-4xl opacity-10 pointer-events-none group-hover:scale-125 transition-transform duration-700">🏛️</div>
                 </div>
                 
-                <div 
-                  onClick={() => {
-                    resetFormData(DeckType.TAROT);
-                    setState(p => ({ ...p, currentView: 'create' }));
-                  }}
-                  className="relative p-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-blue-900 to-cyan-900 cursor-pointer group hover:scale-[1.02] transition-all shadow-2xl overflow-hidden"
-                >
+                <div onClick={() => {
+                  scrollPosRef.current = window.scrollY;
+                  resetFormData(DeckType.TAROT);
+                  setState(p => ({ ...p, currentView: 'create' }));
+                }} className="relative p-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-blue-900 to-cyan-900 cursor-pointer group hover:scale-[1.02] transition-all shadow-2xl overflow-hidden">
                   <div className="flex items-center gap-6 relative z-10">
                     <div className="text-5xl group-hover:animate-pulse transition-all">✨</div>
                     <div>
@@ -877,9 +971,37 @@ ${entry.notes || '无文字记录'}`;
                    <h3 className="text-xl font-serif font-bold">历史星迹记录</h3>
                    <div className="flex gap-4">
                       <button onClick={() => setIsSelectionMode(!isSelectionMode)} className="px-6 py-2 rounded-full border border-indigo-500/20 text-[10px] font-bold uppercase text-indigo-400 hover:bg-indigo-500/10 transition-all">{isSelectionMode ? '取消选择' : '批量管理'}</button>
-                      {!isSelectionMode && <MysticButton onClick={() => { resetFormData(DeckType.TAROT); setState(p => ({ ...p, currentView: 'create' })); }}>+ 启程抽牌</MysticButton>}
+                      {!isSelectionMode && <MysticButton onClick={() => {
+                        scrollPosRef.current = window.scrollY;
+                        resetFormData(DeckType.TAROT);
+                        setState(p => ({ ...p, currentView: 'create' }));
+                      }}>+ 启程抽牌</MysticButton>}
                       {isSelectionMode && selectedEntryIds.size > 0 && <MysticButton variant="danger" onClick={handleBulkDelete}>删除选中 ({selectedEntryIds.size})</MysticButton>}
                    </div>
+                </div>
+
+                {/* 日期精确筛选器 */}
+                <div className="flex flex-col sm:flex-row items-center gap-4 p-5 rounded-2xl border bg-slate-900/10 border-white/5">
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <span className="text-[10px] uppercase font-bold opacity-40 whitespace-nowrap">📅 精确日期筛选:</span>
+                    <input 
+                      type="date" 
+                      value={selectedDateFilter} 
+                      onChange={(e) => setSelectedDateFilter(e.target.value)}
+                      className={`px-4 py-2 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all flex-1 sm:w-44 ${isDark ? 'bg-slate-950 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                    />
+                  </div>
+                  {selectedDateFilter && (
+                    <button 
+                      onClick={() => setSelectedDateFilter('')}
+                      className="text-[10px] uppercase font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
+                    >
+                      ✕ 清除筛选
+                    </button>
+                  )}
+                  {selectedDateFilter && (
+                    <span className="text-[10px] font-serif italic opacity-40 ml-auto">正在查看 {selectedDateFilter} 的记录</span>
+                  )}
                 </div>
 
                 <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
@@ -894,20 +1016,17 @@ ${entry.notes || '无文字记录'}`;
                 </div>
 
                 <div className="space-y-4">
-                  {homeSubView === 'recent' ? (
+                  {homeSubView === 'recent' && !selectedDateFilter ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                       {(displayData as ReadingEntry[]).map(renderEntryCard)}
                     </div>
                   ) : (
                     Object.keys(displayData as Record<string, ReadingEntry[]>).map(month => {
-                      const isExpanded = expandedMonths.has(month);
+                      const isExpanded = expandedMonths.has(month) || !!selectedDateFilter;
                       const monthEntries = (displayData as Record<string, ReadingEntry[]>)[month];
                       return (
                         <div key={month} className={`rounded-2xl border transition-all duration-300 ${isDark ? 'bg-slate-900/20 border-white/5' : 'bg-white border-slate-100 shadow-sm'} ${isExpanded ? 'ring-2 ring-indigo-500/50' : ''}`}>
-                          <div 
-                            onClick={() => toggleMonthExpansion(month)}
-                            className="flex items-center justify-between p-6 cursor-pointer hover:bg-white/5 transition-colors group"
-                          >
+                          <div onClick={() => toggleMonthExpansion(month)} className="flex items-center justify-between p-6 cursor-pointer hover:bg-white/5 transition-colors group">
                             <div className="flex items-center gap-4">
                               <span className={`transition-transform duration-300 ${isExpanded ? 'rotate-90' : 'rotate-0'} text-indigo-500`}>▶</span>
                               <h3 className="text-xl font-bold font-serif">{month}</h3>
@@ -957,11 +1076,7 @@ ${entry.notes || '无文字记录'}`;
                     <label className="text-[10px] uppercase opacity-40 font-bold tracking-widest block px-2">环境色调 (Theme Color)</label>
                     <div className="flex flex-wrap gap-2">
                       {(Object.keys(LENORMAND_THEME_CONFIG) as LenormandColor[]).map(color => (
-                        <button 
-                          key={color} 
-                          onClick={() => updateGlobalLenormandTheme(color)} 
-                          className={`px-4 py-2 rounded-xl text-[10px] font-bold border transition-all ${formData.lenormandColor === color ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-950/20 border-white/5 opacity-60 hover:opacity-100'}`}
-                        >
+                        <button key={color} onClick={() => updateGlobalLenormandTheme(color)} className={`px-4 py-2 rounded-xl text-[10px] font-bold border transition-all ${formData.lenormandColor === color ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-950/20 border-white/5 opacity-60 hover:opacity-100'}`}>
                           {LENORMAND_THEME_CONFIG[color].emoji} {LENORMAND_THEME_CONFIG[color].label}
                         </button>
                       ))}
@@ -1002,24 +1117,12 @@ ${entry.notes || '无文字记录'}`;
                              {tag.startsWith('🏷️') && <button onClick={() => handleRemoveTag(tag)} className="p-1 rounded bg-red-900/40 text-[8px] hover:bg-red-800 text-white">✖</button>}
                           </div>
                         )}
-                        <button 
-                          onClick={() => !isManagingTags && setFormData(p => ({ ...p, tag: p.tag === tag ? undefined : tag }))} 
-                          className={`px-4 py-2 rounded-full text-xs border transition-all ${formData.tag === tag ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-900/40 border-white/5 opacity-40 hover:opacity-100'}`}
-                        >
-                          {tag}
-                        </button>
+                        <button onClick={() => !isManagingTags && setFormData(p => ({ ...p, tag: p.tag === tag ? undefined : tag }))} className={`px-4 py-2 rounded-full text-xs border transition-all ${formData.tag === tag ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-900/40 border-white/5 opacity-40 hover:opacity-100'}`}>{tag}</button>
                       </div>
                     ))}
                     {!isManagingTags && (
                       <div className="flex items-center bg-slate-900/40 border border-white/5 rounded-full px-2 py-0.5 shadow-inner">
-                        <input 
-                          type="text" 
-                          placeholder="+ 自定义" 
-                          value={newTagInput} 
-                          onChange={e => setNewTagInput(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && handleAddCustomTag()}
-                          className="bg-transparent border-none focus:ring-0 text-xs w-20 px-2 py-1"
-                        />
+                        <input type="text" placeholder="+ 自定义" value={newTagInput} onChange={e => setNewTagInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddCustomTag()} className="bg-transparent border-none focus:ring-0 text-xs w-20 px-2 py-1" />
                         {newTagInput && <button onClick={handleAddCustomTag} className="text-indigo-400 font-bold ml-1 text-lg">✓</button>}
                       </div>
                     )}
@@ -1047,14 +1150,7 @@ ${entry.notes || '无文字记录'}`;
                     </div>
                     <div className="md:col-span-2 min-h-[400px] border border-white/5 rounded-3xl flex flex-col items-center justify-center p-8 bg-slate-950/20 overflow-hidden relative shadow-inner">
                         <div className="w-full h-full flex items-center justify-center overflow-hidden">
-                          {renderSpreadPreview(
-                            SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId) || SPREAD_LAYOUTS[formData.deckType][0], 
-                            formData.selectedCards, 
-                            (idx) => { setActivePickerIdx(idx); setShowPicker(true); }, 
-                            showSpreadLabels, 
-                            false, 
-                            formData.cardsPerSide
-                          )}
+                          {renderSpreadPreview(SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId) || SPREAD_LAYOUTS[formData.deckType][0], formData.selectedCards, (idx) => { setActivePickerIdx(idx); setShowPicker(true); }, showSpreadLabels, false, formData.cardsPerSide)}
                         </div>
                         {formData.selectedCards.some(c => c && c.name) && <button onClick={() => { setFormData(p => ({...p, selectedCards: []})); }} className="absolute bottom-2 right-2 bg-black/40 text-[10px] px-2 py-1 rounded-md opacity-40 hover:opacity-100 z-10">重置牌面</button>}
                     </div>
@@ -1071,7 +1167,6 @@ ${entry.notes || '无文字记录'}`;
                       </div>
                     </div>
                   )}
-
                   <div className="space-y-4">
                      <span className="text-[10px] uppercase opacity-40 font-bold tracking-widest block px-2">解牌笔记 (Notes)</span>
                      <textarea value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} placeholder="在此记录下你的直觉解读..." className={`w-full h-32 p-6 rounded-3xl border transition-all resize-none text-base leading-relaxed ${isDark ? 'bg-slate-950 border-white/5 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
@@ -1090,15 +1185,21 @@ ${entry.notes || '无文字记录'}`;
             <div className="max-w-4xl mx-auto animate-in fade-in duration-500 space-y-10">
               <div className="flex justify-between items-center no-print">
                 <button onClick={() => setState(p => ({ ...p, currentView: 'home' }))} className="text-xs opacity-50 hover:opacity-100 flex items-center gap-2 font-bold">← 返回仪表盘</button>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3">
                   <button onClick={() => setShowSpreadLabels(!showSpreadLabels)} className={`text-[9px] uppercase font-mystic px-4 py-2 rounded-full transition-all border ${showSpreadLabels ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-indigo-600/10 text-indigo-400 border-indigo-500/20'}`}>{showSpreadLabels ? '隐藏标签' : '显示标签'}</button>
                   <MysticButton variant="secondary" className="py-2 px-6 text-[10px] uppercase tracking-widest" onClick={() => setIsZenMode(true)}>✨ 专注/分享</MysticButton>
+                  <MysticButton variant="secondary" className="py-2 px-6 text-[10px] uppercase tracking-widest" onClick={() => window.print()}>🖨️ 导出/打印</MysticButton>
                   <MysticButton variant="secondary" className="py-2 px-6 text-[10px] uppercase tracking-widest" onClick={() => handleCopyShare(selectedEntry)}>📋 复制分享</MysticButton>
                   <MysticButton variant="secondary" className="py-2 px-6 text-[10px] uppercase tracking-widest" onClick={() => handleEditEntry(selectedEntry)}>复盘/编辑</MysticButton>
                   <MysticButton variant="danger" className="py-2 px-6 text-[10px] uppercase tracking-widest" onClick={() => handleDeleteSingle(selectedEntry.id)}>销毁档案</MysticButton>
                 </div>
               </div>
               
+              <div className="hidden print:flex flex-col items-center mb-10 border-b border-black/10 pb-6 text-black">
+                <h1 className="text-3xl font-mystic font-bold uppercase tracking-widest">Mystic Journal</h1>
+                <p className="text-sm opacity-60 mt-1">{new Date().toLocaleDateString()} 档案导出</p>
+              </div>
+
               <div className={`p-10 md:p-14 rounded-[2.5rem] border shadow-2xl transition-all ${isDark ? 'bg-slate-900/50 border-white/5' : 'bg-white border-slate-200'} print-content`}>
                   <div className="text-center mb-10">
                     <h2 className="text-4xl font-bold font-serif mb-3 leading-tight">{selectedEntry.title || "星迹记录"}</h2>
@@ -1107,18 +1208,9 @@ ${entry.notes || '无文字记录'}`;
                     </div>
                   </div>
                   {selectedEntry.image && <div className="mb-12 max-w-2xl mx-auto rounded-[2.5rem] overflow-hidden border border-white/5 shadow-2xl"><img src={selectedEntry.image} className="w-full" /></div>}
-                  
                   <div className="mb-14 w-full flex justify-center">
-                    {renderSpreadPreview(
-                      SPREAD_LAYOUTS[selectedEntry.deckType].find(l => l.id === selectedEntry.layoutId) || SPREAD_LAYOUTS[selectedEntry.deckType][0], 
-                      selectedEntry.selectedCards || [], 
-                      () => {}, 
-                      showSpreadLabels, 
-                      false, 
-                      selectedEntry.cardsPerSide
-                    )}
+                    {renderSpreadPreview(SPREAD_LAYOUTS[selectedEntry.deckType].find(l => l.id === selectedEntry.layoutId) || SPREAD_LAYOUTS[selectedEntry.deckType][0], selectedEntry.selectedCards || [], () => {}, showSpreadLabels, false, selectedEntry.cardsPerSide)}
                   </div>
-
                   <div className="grid grid-cols-1 gap-8">
                     {(selectedEntry.actualOutcome || selectedEntry.accuracyRating) && <div className={`p-8 rounded-[2rem] border leading-relaxed italic font-serif ${isDark ? 'bg-indigo-900/10 border-indigo-500/10' : 'bg-indigo-50 border-indigo-100'}`}><div className="flex justify-between items-start mb-6"><h4 className="text-[10px] uppercase text-indigo-500 font-bold tracking-[0.3em]">复盘反思</h4>{selectedEntry.accuracyRating ? <span className="text-amber-500 text-lg">{'★'.repeat(selectedEntry.accuracyRating)}</span> : null}</div><div className="whitespace-pre-wrap text-lg opacity-90 leading-loose text-indigo-400/80">{selectedEntry.actualOutcome || "暂未填写实际结果。"}</div></div>}
                     <div className={`p-8 rounded-[2rem] border leading-relaxed italic font-serif ${isDark ? 'bg-slate-950/40 border-white/5 shadow-inner' : 'bg-slate-50 border-slate-200 shadow-sm'}`}><h4 className="text-[10px] uppercase opacity-30 mb-6 font-bold tracking-[0.3em]">当时解读</h4><div className="whitespace-pre-wrap text-lg opacity-90 leading-loose">{selectedEntry.notes || "无文字记录。"}</div></div>
@@ -1137,14 +1229,7 @@ ${entry.notes || '无文字记录'}`;
             <div className="w-full max-w-7xl h-full flex flex-col justify-center items-center overflow-y-auto py-24 no-scrollbar">
               <h2 className="text-4xl sm:text-6xl font-bold font-serif mb-16 sm:mb-24 text-center tracking-[0.2em]">{selectedEntry.title || "星迹记录"}</h2>
               <div className="w-full flex justify-center items-center">
-                {renderSpreadPreview(
-                  SPREAD_LAYOUTS[selectedEntry.deckType].find(l => l.id === selectedEntry.layoutId) || SPREAD_LAYOUTS[selectedEntry.deckType][0], 
-                  selectedEntry.selectedCards || [], 
-                  () => {}, 
-                  showSpreadLabels, 
-                  true, 
-                  selectedEntry.cardsPerSide
-                )}
+                {renderSpreadPreview(SPREAD_LAYOUTS[selectedEntry.deckType].find(l => l.id === selectedEntry.layoutId) || SPREAD_LAYOUTS[selectedEntry.deckType][0], selectedEntry.selectedCards || [], () => {}, showSpreadLabels, true, selectedEntry.cardsPerSide)}
               </div>
               <p className="text-[12px] opacity-10 uppercase tracking-[0.8em] animate-pulse mt-16 sm:mt-32">点击卡牌查看寓意 • 仪式神圣</p>
             </div>
@@ -1163,7 +1248,6 @@ ${entry.notes || '无文字记录'}`;
                 {(formData.deckType === DeckType.TAROT ? TAROT_CARDS[activeTarotTab] : LENORMAND_CARDS).map(name => {
                   const currentCards = formData.selectedCards.filter(c => c.name);
                   const isSelectedHere = currentCards.some(s => s.name === name);
-                  
                   return (
                     <div key={name} className="relative">
                       <div onClick={() => {
@@ -1174,32 +1258,18 @@ ${entry.notes || '无文字记录'}`;
                           setFormData(p => ({ ...p, selectedCards: updated }));
                         } else {
                           const layout = SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId);
-                          const limit = layout?.id === 'free' 
-                            ? (formData.deckType === DeckType.TAROT ? 78 : 36)
-                            : (layout?.type === 'configurable_comparison' ? formData.cardsPerSide * 2 : (layout?.positions.length || 1));
-                          
+                          const limit = layout?.id === 'free' ? (formData.deckType === DeckType.TAROT ? 78 : 36) : (layout?.type === 'configurable_comparison' ? formData.cardsPerSide * 2 : (layout?.positions.length || 1));
                           if (currentCards.length < limit) {
-                            setFormData(p => ({ 
-                              ...p, 
-                              selectedCards: [...p.selectedCards.filter(c => c.name), { name, isReversed: false }] 
-                            }));
+                            setFormData(p => ({ ...p, selectedCards: [...p.selectedCards.filter(c => c.name), { name, isReversed: false }] }));
                           }
                         }
                       }} className={`relative cursor-pointer transition-all ${isSelectedHere ? 'scale-105 z-10' : 'opacity-50 hover:opacity-100'}`}>
                         <CardBack type={formData.deckType} name={name} compact color={formData.lenormandColor} theme={state.theme} showDetailsOnHover={true} />
                         {isSelectedHere && <div className="absolute inset-0 border-4 border-yellow-400 rounded-xl pointer-events-none z-20 shadow-[0_0_15px_rgba(250,204,21,0.5)]"></div>}
                       </div>
-                      
                       {isSelectedHere && formData.deckType === DeckType.TAROT && (
                         <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 z-[70] flex gap-1">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const updated = formData.selectedCards.map(s => s.name === name ? { ...s, isReversed: !s.isReversed } : s);
-                              setFormData(p => ({ ...p, selectedCards: updated }));
-                            }}
-                            className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase transition-all shadow-lg border border-white/10 ${formData.selectedCards.find(s => s.name === name)?.isReversed ? 'bg-amber-600 text-white' : 'bg-indigo-600 text-white'}`}
-                          >
+                          <button onClick={(e) => { e.stopPropagation(); const updated = formData.selectedCards.map(s => s.name === name ? { ...s, isReversed: !s.isReversed } : s); setFormData(p => ({ ...p, selectedCards: updated })); }} className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase transition-all shadow-lg border border-white/10 ${formData.selectedCards.find(s => s.name === name)?.isReversed ? 'bg-amber-600 text-white' : 'bg-indigo-600 text-white'}`}>
                             {formData.selectedCards.find(s => s.name === name)?.isReversed ? '逆位' : '正位'}
                           </button>
                         </div>

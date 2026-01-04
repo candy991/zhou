@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -48,6 +47,30 @@
     .animate-pulse-slow {
       animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
+
+    @media print {
+      body {
+        background-color: white !important;
+        color: black !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .print-content {
+        background-color: white !important;
+        color: black !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        width: 100% !important;
+      }
+      @page {
+        size: A4;
+        margin: 20mm;
+      }
+    }
   </style>
 <script type="importmap">
 {
@@ -60,7 +83,6 @@
   }
 }
 </script>
-  <script type="module" src="/index.tsx"></script>
 </head>
 <body>
   <div id="root"></div>
