@@ -182,10 +182,11 @@ export const CardArchive: React.FC<CardArchiveProps> = ({ entries, theme, lenorm
       {selectedCardName && (
         <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => setSelectedCardName(null)}></div>
-          <div className={`relative w-full max-w-4xl max-h-[90vh] border rounded-[3rem] shadow-2xl overflow-hidden flex flex-col md:flex-row ${isDark ? 'bg-slate-900 border-white/10' : 'bg-white border-slate-200'}`}>
+          {/* 修复：添加 overflow-y-auto 允许移动端在内容过长时整体滚动 */}
+          <div className={`relative w-full max-w-4xl max-h-[95vh] md:max-h-[90vh] border rounded-[3rem] shadow-2xl overflow-y-auto md:overflow-hidden flex flex-col md:flex-row ${isDark ? 'bg-slate-900 border-white/10' : 'bg-white border-slate-200'}`}>
             <button onClick={() => setSelectedCardName(null)} className="absolute top-6 right-6 z-10 text-2xl opacity-40 hover:opacity-100 transition-opacity">✕</button>
             
-            <div className="w-full md:w-1/2 aspect-[2/3] md:aspect-auto bg-black overflow-hidden flex items-center justify-center">
+            <div className="w-full md:w-1/2 aspect-[2/3] md:aspect-auto bg-black overflow-hidden flex items-center justify-center shrink-0">
               <div className="w-full max-w-[320px] shadow-2xl scale-90 md:scale-100">
                 <CardBack 
                    type={activeSystem} 
@@ -197,7 +198,8 @@ export const CardArchive: React.FC<CardArchiveProps> = ({ entries, theme, lenorm
               </div>
             </div>
 
-            <div className="w-full md:w-1/2 p-8 md:p-12 overflow-y-auto custom-scrollbar flex flex-col">
+            {/* 修复：md: 模式下才应用内部滚动，移动端随父级整体滚动 */}
+            <div className="w-full md:w-1/2 p-8 md:p-12 md:overflow-y-auto custom-scrollbar flex flex-col">
               <div className="mb-8">
                 <h3 className="text-4xl font-serif font-bold mb-2">{(activeSystem === DeckType.TAROT ? TAROT_DETAILS[selectedCardName] : LENORMAND_DETAILS[selectedCardName])?.zh}</h3>
                 <p className="text-xs opacity-40 uppercase tracking-[0.4em] font-mystic">{(activeSystem === DeckType.TAROT ? TAROT_DETAILS[selectedCardName] : LENORMAND_DETAILS[selectedCardName])?.en}</p>
