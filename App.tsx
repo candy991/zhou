@@ -630,8 +630,17 @@ ${entry.notes || '无文字记录'}`;
     );
   };
 
-  const renderSpreadPreview = (layout: SpreadLayout, selectedCards: SelectedCard[], onSlotClick: (idx: number) => void, showLabels: boolean, isZen: boolean = false, cardsPerSide: number = 3) => {
-    const isLenormand = (layout.type === DeckType.LENORMAND) || (layout.id === 'two_paths_dynamic' && formData.deckType === DeckType.LENORMAND);
+  const renderSpreadPreview = (
+    layout: SpreadLayout, 
+    selectedCards: SelectedCard[], 
+    onSlotClick: (idx: number) => void, 
+    showLabels: boolean, 
+    isZen: boolean = false, 
+    cardsPerSide: number = 3,
+    deckType: DeckType = DeckType.TAROT,
+    color: LenormandColor = 'default'
+  ) => {
+    const isLenormand = (layout.type === DeckType.LENORMAND) || (layout.id === 'two_paths_dynamic' && deckType === DeckType.LENORMAND);
     const isGrandTableau = layout.id === 'l-gt';
     const isComparison = layout.type === 'configurable_comparison';
     const isFree = layout.type === 'free';
@@ -645,15 +654,18 @@ ${entry.notes || '无文字记录'}`;
             <div key={idx} className={`${cardSizeClass} flex flex-col items-center gap-2 group/item`}>
               <div className="w-full aspect-[2/3] relative shadow-xl rounded-xl transition-transform hover:scale-105">
                 <CardBack 
-                  type={formData.deckType} 
+                  type={deckType} 
                   name={card.name} 
                   isReversed={card.isReversed} 
-                  color={formData.lenormandColor} 
+                  color={color} 
                   theme={state.theme} 
                   onInfoClick={() => onSlotClick(idx)}
                   showDetailsOnHover={true}
                 />
               </div>
+              {showLabels && (
+                <span className="text-[9px] md:text-[11px] opacity-40 uppercase font-bold text-center truncate w-full tracking-widest bg-black/20 px-3 py-1.5 rounded-lg border border-white/5">牌 {idx + 1}</span>
+              )}
             </div>
           ))}
           {!isZen && (
@@ -687,10 +699,10 @@ ${entry.notes || '无文字记录'}`;
                         <div className="w-full aspect-[2/3] relative shadow-xl rounded-xl transition-all hover:scale-105">
                            {card && card.name ? (
                               <CardBack 
-                                type={formData.deckType} 
+                                type={deckType} 
                                 name={card.name} 
                                 isReversed={card.isReversed} 
-                                color={formData.lenormandColor} 
+                                color={color} 
                                 theme={state.theme} 
                                 onInfoClick={() => onSlotClick(idx)}
                                 showDetailsOnHover={true}
@@ -733,7 +745,7 @@ ${entry.notes || '无文字记录'}`;
                         type={DeckType.LENORMAND} 
                         name={card.name} 
                         isReversed={card.isReversed} 
-                        color={formData.lenormandColor} 
+                        color={color} 
                         theme={state.theme} 
                         onInfoClick={() => onSlotClick(idx)}
                         showDetailsOnHover={true}
@@ -764,10 +776,10 @@ ${entry.notes || '无文字记录'}`;
               <div className="w-full aspect-[2/3] relative shadow-2xl rounded-xl transition-transform hover:scale-105">
                  {card && card.name ? (
                     <CardBack 
-                      type={formData.deckType} 
+                      type={deckType} 
                       name={card.name} 
                       isReversed={card.isReversed} 
-                      color={formData.lenormandColor} 
+                      color={color} 
                       theme={state.theme} 
                       onInfoClick={() => onSlotClick(idx)}
                       showDetailsOnHover={true}
@@ -1150,7 +1162,7 @@ ${entry.notes || '无文字记录'}`;
                     </div>
                     <div className="md:col-span-2 min-h-[400px] border border-white/5 rounded-3xl flex flex-col items-center justify-center p-8 bg-slate-950/20 overflow-hidden relative shadow-inner">
                         <div className="w-full h-full flex items-center justify-center overflow-hidden">
-                          {renderSpreadPreview(SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId) || SPREAD_LAYOUTS[formData.deckType][0], formData.selectedCards, (idx) => { setActivePickerIdx(idx); setShowPicker(true); }, showSpreadLabels, false, formData.cardsPerSide)}
+                          {renderSpreadPreview(SPREAD_LAYOUTS[formData.deckType].find(l => l.id === formData.layoutId) || SPREAD_LAYOUTS[formData.deckType][0], formData.selectedCards, (idx) => { setActivePickerIdx(idx); setShowPicker(true); }, showSpreadLabels, false, formData.cardsPerSide, formData.deckType, formData.lenormandColor)}
                         </div>
                         {formData.selectedCards.some(c => c && c.name) && <button onClick={() => { setFormData(p => ({...p, selectedCards: []})); }} className="absolute bottom-2 right-2 bg-black/40 text-[10px] px-2 py-1 rounded-md opacity-40 hover:opacity-100 z-10">重置牌面</button>}
                     </div>
@@ -1209,7 +1221,7 @@ ${entry.notes || '无文字记录'}`;
                   </div>
                   {selectedEntry.image && <div className="mb-12 max-w-2xl mx-auto rounded-[2.5rem] overflow-hidden border border-white/5 shadow-2xl"><img src={selectedEntry.image} className="w-full" /></div>}
                   <div className="mb-14 w-full flex justify-center">
-                    {renderSpreadPreview(SPREAD_LAYOUTS[selectedEntry.deckType].find(l => l.id === selectedEntry.layoutId) || SPREAD_LAYOUTS[selectedEntry.deckType][0], selectedEntry.selectedCards || [], () => {}, showSpreadLabels, false, selectedEntry.cardsPerSide)}
+                    {renderSpreadPreview(SPREAD_LAYOUTS[selectedEntry.deckType].find(l => l.id === selectedEntry.layoutId) || SPREAD_LAYOUTS[selectedEntry.deckType][0], selectedEntry.selectedCards || [], () => {}, showSpreadLabels, false, selectedEntry.cardsPerSide, selectedEntry.deckType, selectedEntry.lenormandColor || 'default')}
                   </div>
                   <div className="grid grid-cols-1 gap-8">
                     {(selectedEntry.actualOutcome || selectedEntry.accuracyRating) && <div className={`p-8 rounded-[2rem] border leading-relaxed italic font-serif ${isDark ? 'bg-indigo-900/10 border-indigo-500/10' : 'bg-indigo-50 border-indigo-100'}`}><div className="flex justify-between items-start mb-6"><h4 className="text-[10px] uppercase text-indigo-500 font-bold tracking-[0.3em]">复盘反思</h4>{selectedEntry.accuracyRating ? <span className="text-amber-500 text-lg">{'★'.repeat(selectedEntry.accuracyRating)}</span> : null}</div><div className="whitespace-pre-wrap text-lg opacity-90 leading-loose text-indigo-400/80">{selectedEntry.actualOutcome || "暂未填写实际结果。"}</div></div>}
@@ -1229,7 +1241,7 @@ ${entry.notes || '无文字记录'}`;
             <div className="w-full max-w-7xl h-full flex flex-col justify-center items-center overflow-y-auto py-24 no-scrollbar">
               <h2 className="text-4xl sm:text-6xl font-bold font-serif mb-16 sm:mb-24 text-center tracking-[0.2em]">{selectedEntry.title || "星迹记录"}</h2>
               <div className="w-full flex justify-center items-center">
-                {renderSpreadPreview(SPREAD_LAYOUTS[selectedEntry.deckType].find(l => l.id === selectedEntry.layoutId) || SPREAD_LAYOUTS[selectedEntry.deckType][0], selectedEntry.selectedCards || [], () => {}, showSpreadLabels, true, selectedEntry.cardsPerSide)}
+                {renderSpreadPreview(SPREAD_LAYOUTS[selectedEntry.deckType].find(l => l.id === selectedEntry.layoutId) || SPREAD_LAYOUTS[selectedEntry.deckType][0], selectedEntry.selectedCards || [], () => {}, showSpreadLabels, true, selectedEntry.cardsPerSide, selectedEntry.deckType, selectedEntry.lenormandColor || 'default')}
               </div>
               <p className="text-[12px] opacity-10 uppercase tracking-[0.8em] animate-pulse mt-16 sm:mt-32">点击卡牌查看寓意 • 仪式神圣</p>
             </div>
